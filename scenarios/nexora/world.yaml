@@ -1,0 +1,194 @@
+# Physical world of NEXORA: zones (navigable areas) → locations → objects.
+# Object keys are the names of the corresponding Three.js objects.
+
+zones:
+  - code: NEXORA_HQ
+    name: NEXORA HQ
+    kind: site
+    description: Twelve-storey headquarters tower in the Harbor District.
+    unlocked_by_default: true
+  - code: HQ_LOBBY
+    name: HQ Lobby
+    kind: floor
+    parent: NEXORA_HQ
+    description: Ground-floor lobby with reception, visitor badges and elevators.
+    unlocked_by_default: true
+  - code: HQ_FLOOR_2
+    name: HQ Floor 2 – Finance & HR
+    kind: floor
+    parent: NEXORA_HQ
+    description: Finance and Human Resources share the second floor.
+    unlocked_by_default: true
+  - code: HQ_FLOOR_3
+    name: HQ Floor 3 – Engineering & IT
+    kind: floor
+    parent: NEXORA_HQ
+    description: Engineering bullpen, the IT office and a project room.
+    required_career_rank: 1
+  - code: HQ_FLOOR_4
+    name: HQ Floor 4 – Security
+    kind: floor
+    parent: NEXORA_HQ
+    description: Home of the security organisation, the SOC and the Red Team.
+    unlocked_by_default: true
+  - code: HQ_EXEC_FLOOR
+    name: Executive Floor
+    kind: floor
+    parent: NEXORA_HQ
+    description: Executive offices and the boardroom on the top floor.
+    required_career_rank: 3
+  - code: HQ_SERVER_ROOM
+    name: Server Room
+    kind: area
+    parent: NEXORA_HQ
+    description: Badge-controlled basement server room housing the core infrastructure.
+    required_career_rank: 2
+  - code: BRANCH
+    name: NEXORA Branch Office
+    kind: site
+    description: Regional sales and support office across town.
+    required_career_rank: 2
+  - code: BRANCH_OFFICE
+    name: Branch Office Floor
+    kind: floor
+    parent: BRANCH
+    description: Single open-plan floor with a small comms closet.
+    required_career_rank: 2
+
+locations:
+  - { code: LOBBY_RECEPTION, name: HQ Lobby Reception, kind: reception, zone: HQ_LOBBY,
+      description: Front desk where visitors sign in and collect temporary badges. }
+  - { code: EXEC_SUITE, name: Executive Suite, kind: office, zone: HQ_EXEC_FLOOR, department: EXEC,
+      description: Corner offices of the executive team. }
+  - { code: BOARDROOM, name: Boardroom, kind: meeting_room, zone: HQ_EXEC_FLOOR,
+      description: Board and leadership meeting room. }
+  - { code: HR_OFFICE, name: Human Resources Office, kind: office, zone: HQ_FLOOR_2, department: HR }
+  - { code: FINANCE_DEPT, name: Finance Department, kind: open_office, zone: HQ_FLOOR_2, department: FIN }
+  - { code: MEETING_ROOM_2A, name: Meeting Room 2A, kind: meeting_room, zone: HQ_FLOOR_2 }
+  - { code: ENGINEERING_BULLPEN, name: Engineering, kind: open_office, zone: HQ_FLOOR_3, department: ENG }
+  - { code: IT_OFFICE, name: IT Office, kind: office, zone: HQ_FLOOR_3, department: IT }
+  - { code: MEETING_ROOM_3A, name: Meeting Room 3A, kind: meeting_room, zone: HQ_FLOOR_3 }
+  - { code: SECURITY_OFFICE, name: Security Office, kind: office, zone: HQ_FLOOR_4, department: SEC }
+  - { code: SOC_FLOOR, name: SOC, kind: soc, zone: HQ_FLOOR_4, department: SOC,
+      description: 24/7 monitoring room with a wall of dashboards. }
+  - { code: RED_TEAM_OFFICE, name: Red Team Office, kind: lab, zone: HQ_FLOOR_4, department: REDTEAM,
+      description: Lab where authorised engagements are planned and run. }
+  - { code: SERVER_ROOM, name: Server Room, kind: server_room, zone: HQ_SERVER_ROOM, department: IT }
+  - { code: BRANCH_OPEN_OFFICE, name: Branch Open Office, kind: open_office, zone: BRANCH_OFFICE }
+
+objects:
+  # Doors and elevators between zones.
+  - { key: lobby_elevator_f2, name: Elevator to Floor 2, kind: door, location: LOBBY_RECEPTION,
+      leads_to: HQ_FLOOR_2, interactions: [OPEN_DOOR, CLOSE_DOOR] }
+  - { key: lobby_elevator_f3, name: Elevator to Floor 3, kind: door, location: LOBBY_RECEPTION,
+      leads_to: HQ_FLOOR_3, interactions: [OPEN_DOOR, CLOSE_DOOR] }
+  - { key: lobby_elevator_f4, name: Elevator to Floor 4, kind: door, location: LOBBY_RECEPTION,
+      leads_to: HQ_FLOOR_4, interactions: [OPEN_DOOR, CLOSE_DOOR] }
+  - { key: lobby_elevator_exec, name: Executive Elevator, kind: door, location: LOBBY_RECEPTION,
+      leads_to: HQ_EXEC_FLOOR, interactions: [OPEN_DOOR, CLOSE_DOOR, INSPECT_OBJECT],
+      description: Requires an executive-floor badge. }
+  - { key: server_room_door, name: Server Room Door, kind: door, location: LOBBY_RECEPTION,
+      leads_to: HQ_SERVER_ROOM, interactions: [OPEN_DOOR, CLOSE_DOOR, INSPECT_OBJECT],
+      description: Heavy door with a badge reader and a camera above it. }
+  - { key: f2_elevator_lobby, name: Elevator to Lobby, kind: door, location: MEETING_ROOM_2A,
+      leads_to: HQ_LOBBY, interactions: [OPEN_DOOR, CLOSE_DOOR] }
+  - { key: f3_elevator_lobby, name: Elevator to Lobby, kind: door, location: MEETING_ROOM_3A,
+      leads_to: HQ_LOBBY, interactions: [OPEN_DOOR, CLOSE_DOOR] }
+  - { key: f4_elevator_lobby, name: Elevator to Lobby, kind: door, location: SECURITY_OFFICE,
+      leads_to: HQ_LOBBY, interactions: [OPEN_DOOR, CLOSE_DOOR] }
+
+  # Lobby.
+  - key: lobby_visitor_policy
+    name: Visitor Policy Sign
+    kind: document
+    location: LOBBY_RECEPTION
+    interactions: [READ_DOCUMENT]
+    content: |
+      All visitors must sign in, wear a visible badge and be escorted above the lobby.
+      Tailgating through badge-controlled doors is prohibited.
+      Report lost badges to IT Security (security@nexora.local) immediately.
+  - { key: lobby_badge_reader, name: Turnstile Badge Reader, kind: badge_reader, location: LOBBY_RECEPTION,
+      asset: IOT-HQ-BADGE-01, interactions: [INSPECT_OBJECT] }
+
+  # Floor 2.
+  - { key: finance_pc_01, name: Victor's Workstation, kind: workstation, location: FINANCE_DEPT,
+      asset: HQ-FIN-PC-01, interactions: [USE_WORKSTATION, INSPECT_OBJECT] }
+  - { key: finance_pc_04, name: Alex's Workstation, kind: workstation, location: FINANCE_DEPT,
+      asset: HQ-FIN-PC-04, interactions: [USE_WORKSTATION, INSPECT_OBJECT],
+      description: A sticky note on the monitor bezel reads "Q3 close – ask Daniel". }
+  - { key: finance_printer, name: Finance Printer, kind: printer, location: FINANCE_DEPT,
+      asset: PRN-HQ-FIN-01, interactions: [INSPECT_OBJECT] }
+  - key: finance_whiteboard
+    name: Finance Whiteboard
+    kind: whiteboard
+    location: FINANCE_DEPT
+    interactions: [READ_DOCUMENT]
+    content: |
+      Q3 CLOSE CHECKLIST
+      - Vendor payments run: Thursday (Sofia)
+      - Payroll export to bank portal: Friday (Liam)
+      - Ledger app upgrade postponed again (waiting on Engineering)
+  - { key: hr_pc_01, name: HR Workstation, kind: workstation, location: HR_OFFICE,
+      asset: HQ-HR-PC-01, interactions: [USE_WORKSTATION, INSPECT_OBJECT] }
+
+  # Floor 3.
+  - { key: eng_pc_devops, name: DevOps Workstation, kind: workstation, location: ENGINEERING_BULLPEN,
+      asset: HQ-ENG-PC-03, interactions: [USE_WORKSTATION, INSPECT_OBJECT] }
+  - key: eng_deploy_screen
+    name: Deployment Dashboard
+    kind: screen
+    location: ENGINEERING_BULLPEN
+    interactions: [READ_DOCUMENT, INSPECT_OBJECT]
+    content: |
+      NEXORA PORTAL – DEPLOYMENTS
+      web01  portal v4.12.0   deployed by svc-deploy   OK
+      app01  ledger v2.3.1    pending change approval
+      git01  CodeVault        nightly backup to s3://nexora-backups
+  - { key: it_helpdesk_pc, name: Helpdesk Workstation, kind: workstation, location: IT_OFFICE,
+      asset: HQ-IT-PC-03, interactions: [USE_WORKSTATION, INSPECT_OBJECT] }
+
+  # Floor 4 – Security.
+  - key: soc_wall_screen
+    name: SOC Video Wall
+    kind: screen
+    location: SOC_FLOOR
+    interactions: [READ_DOCUMENT, INSPECT_OBJECT]
+    content: |
+      WATCHTOWER SIEM – LAST 24H
+      Alerts: 37 (critical 0, high 2, medium 11, low 24)
+      Top source: VPN01 failed logins from unusual geographies
+      Open cases: 4
+  - { key: soc_analyst_ws_01, name: SOC Analyst Workstation, kind: workstation, location: SOC_FLOOR,
+      asset: HQ-SOC-PC-02, interactions: [USE_WORKSTATION, INSPECT_OBJECT] }
+  - key: redteam_ws_01
+    name: Red Team Workstation
+    kind: workstation
+    location: RED_TEAM_OFFICE
+    asset: HQ-RT-PC-03
+    interactions: [USE_WORKSTATION, ACCESS_TERMINAL, START_ENGAGEMENT, INSPECT_OBJECT]
+    description: Hardened attack workstation connected to the isolated engagement network.
+  - key: redteam_rules_of_engagement
+    name: Rules of Engagement Poster
+    kind: document
+    location: RED_TEAM_OFFICE
+    interactions: [READ_DOCUMENT]
+    content: |
+      RULES OF ENGAGEMENT
+      1. Work only within a signed, authorised engagement and its scope.
+      2. Engagement ranges are isolated replicas. Never touch production.
+      3. Stop and report immediately if you find real personal data.
+      4. Document every action. Evidence goes to the engagement record.
+
+  # Server room.
+  - { key: server_rack_a, name: Server Rack A, kind: server_rack, location: SERVER_ROOM,
+      asset: SRV-HQ-DC01, interactions: [INSPECT_OBJECT],
+      description: Domain controller and identity services. }
+  - { key: server_rack_b, name: Server Rack B, kind: server_rack, location: SERVER_ROOM,
+      asset: SRV-HQ-APP01, interactions: [INSPECT_OBJECT],
+      description: "Application, database and source-control servers." }
+  - { key: server_room_console, name: Rack Console, kind: terminal, location: SERVER_ROOM,
+      asset: SRV-HQ-JUMP01, interactions: [INSPECT_OBJECT, ACCESS_TERMINAL] }
+
+  # Branch office.
+  - { key: branch_pc_01, name: Branch Workstation, kind: workstation, location: BRANCH_OPEN_OFFICE,
+      asset: BR-FIN-PC-01, interactions: [USE_WORKSTATION, INSPECT_OBJECT] }

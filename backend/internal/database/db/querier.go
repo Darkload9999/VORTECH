@@ -11,19 +11,85 @@ import (
 )
 
 type Querier interface {
+	// Run before upserting so hostnames/IPs can move between assets within one
+	// import without tripping the per-company unique indexes.
+	ClearAssetAddresses(ctx context.Context, companyID uuid.UUID) error
+	DeactivateOtherScenarios(ctx context.Context, id uuid.UUID) error
+	DeleteCompanyRelationships(ctx context.Context, companyID uuid.UUID) error
+	DeleteCompanySchedules(ctx context.Context, companyID uuid.UUID) error
+	DeleteStaleAssets(ctx context.Context, arg DeleteStaleAssetsParams) (int64, error)
+	DeleteStaleDepartments(ctx context.Context, arg DeleteStaleDepartmentsParams) (int64, error)
+	DeleteStaleEmployees(ctx context.Context, arg DeleteStaleEmployeesParams) (int64, error)
+	DeleteStaleIdentities(ctx context.Context, arg DeleteStaleIdentitiesParams) (int64, error)
+	DeleteStaleLocations(ctx context.Context, arg DeleteStaleLocationsParams) (int64, error)
+	DeleteStaleWorldObjects(ctx context.Context, arg DeleteStaleWorldObjectsParams) (int64, error)
+	DeleteStaleZones(ctx context.Context, arg DeleteStaleZonesParams) (int64, error)
+	// Read side for company, departments and employees. Every query is scoped by
+	// company_id so one company's data never leaks into another world.
+	GetActiveCompany(ctx context.Context) (GetActiveCompanyRow, error)
+	GetAsset(ctx context.Context, arg GetAssetParams) (GetAssetRow, error)
+	GetCompanyIDByScenario(ctx context.Context, scenarioID uuid.UUID) (uuid.UUID, error)
+	GetCompanyStats(ctx context.Context, companyID uuid.UUID) (GetCompanyStatsRow, error)
+	GetEmployee(ctx context.Context, arg GetEmployeeParams) (GetEmployeeRow, error)
 	GetPlayerIDByUserID(ctx context.Context, userID uuid.UUID) (uuid.UUID, error)
+	// Write side of the scenario importer. Entities are upserted by natural key
+	// so their IDs survive re-imports; anything no longer present in the
+	// scenario files is pruned with the Delete* queries.
+	GetScenarioBySlug(ctx context.Context, slug string) (Scenario, error)
 	// The user together with their player profile, if any.
 	GetUserProfile(ctx context.Context, userID uuid.UUID) (GetUserProfileRow, error)
+	GetWorldObjectByKey(ctx context.Context, arg GetWorldObjectByKeyParams) (GetWorldObjectByKeyRow, error)
+	GetZone(ctx context.Context, arg GetZoneParams) (GetZoneRow, error)
 	InsertAuditLog(ctx context.Context, arg InsertAuditLogParams) (InsertAuditLogRow, error)
 	// Returns the new player's id, or no rows if the user already has one.
 	InsertPlayerIfMissing(ctx context.Context, arg InsertPlayerIfMissingParams) (uuid.UUID, error)
+	InsertRelationship(ctx context.Context, arg InsertRelationshipParams) error
+	InsertSchedule(ctx context.Context, arg InsertScheduleParams) error
+	// Networks the asset is connected to (CONNECTED_TO edges to network assets).
+	ListAssetNetworks(ctx context.Context, arg ListAssetNetworksParams) ([]ListAssetNetworksRow, error)
+	ListAssetWorldObjects(ctx context.Context, arg ListAssetWorldObjectsParams) ([]ListAssetWorldObjectsRow, error)
+	// Keyset pagination on asset_code.
+	ListAssets(ctx context.Context, arg ListAssetsParams) ([]ListAssetsRow, error)
 	// Newest first with keyset pagination: pass the (occurred_at, id) of the
 	// last row of the previous page as the cursor, or NULLs for the first page.
 	ListAuditLogs(ctx context.Context, arg ListAuditLogsParams) ([]AuditLog, error)
+	ListCompanyRelationships(ctx context.Context, companyID uuid.UUID) ([]ListCompanyRelationshipsRow, error)
+	ListDepartments(ctx context.Context, companyID uuid.UUID) ([]ListDepartmentsRow, error)
+	ListDirectReports(ctx context.Context, arg ListDirectReportsParams) ([]ListDirectReportsRow, error)
+	ListEmployeeAssets(ctx context.Context, arg ListEmployeeAssetsParams) ([]ListEmployeeAssetsRow, error)
+	ListEmployeeIdentities(ctx context.Context, arg ListEmployeeIdentitiesParams) ([]ListEmployeeIdentitiesRow, error)
+	ListEmployeeSchedule(ctx context.Context, arg ListEmployeeScheduleParams) ([]ListEmployeeScheduleRow, error)
+	// Keyset pagination on employee_code. search is an ILIKE pattern built and
+	// escaped by the caller.
+	ListEmployees(ctx context.Context, arg ListEmployeesParams) ([]ListEmployeesRow, error)
+	ListGraphAssets(ctx context.Context, companyID uuid.UUID) ([]ListGraphAssetsRow, error)
+	ListGraphEmployees(ctx context.Context, companyID uuid.UUID) ([]ListGraphEmployeesRow, error)
+	ListGraphIdentities(ctx context.Context, companyID uuid.UUID) ([]ListGraphIdentitiesRow, error)
+	// NPCs whose home location is in the zone. The living-company scheduler
+	// will move them during the day in a later phase.
+	ListZoneEmployees(ctx context.Context, arg ListZoneEmployeesParams) ([]ListZoneEmployeesRow, error)
+	ListZoneLocations(ctx context.Context, arg ListZoneLocationsParams) ([]ListZoneLocationsRow, error)
+	ListZoneObjects(ctx context.Context, arg ListZoneObjectsParams) ([]ListZoneObjectsRow, error)
+	ListZones(ctx context.Context, companyID uuid.UUID) ([]ListZonesRow, error)
+	// Serialises concurrent imports of the same scenario for the transaction.
+	LockScenarioImport(ctx context.Context, slug string) error
+	PublishAndActivateScenario(ctx context.Context, id uuid.UUID) error
+	SetDepartmentLinks(ctx context.Context, arg SetDepartmentLinksParams) error
+	SetEmployeeManager(ctx context.Context, arg SetEmployeeManagerParams) error
+	SetZoneParent(ctx context.Context, arg SetZoneParentParams) error
+	UpsertAsset(ctx context.Context, arg UpsertAssetParams) (uuid.UUID, error)
+	UpsertCompany(ctx context.Context, arg UpsertCompanyParams) (uuid.UUID, error)
+	UpsertDepartment(ctx context.Context, arg UpsertDepartmentParams) (uuid.UUID, error)
+	UpsertEmployee(ctx context.Context, arg UpsertEmployeeParams) (uuid.UUID, error)
+	UpsertIdentity(ctx context.Context, arg UpsertIdentityParams) (uuid.UUID, error)
+	UpsertLocation(ctx context.Context, arg UpsertLocationParams) (uuid.UUID, error)
+	UpsertScenario(ctx context.Context, arg UpsertScenarioParams) (UpsertScenarioRow, error)
 	// Creates the user on first sight and refreshes the mirrored profile
 	// otherwise. The update always runs (last_seen_at changes) so RETURNING
 	// yields a row in both cases; xmax = 0 identifies a fresh insert.
 	UpsertUserFromToken(ctx context.Context, arg UpsertUserFromTokenParams) (UpsertUserFromTokenRow, error)
+	UpsertWorldObject(ctx context.Context, arg UpsertWorldObjectParams) (uuid.UUID, error)
+	UpsertZone(ctx context.Context, arg UpsertZoneParams) (uuid.UUID, error)
 }
 
 var _ Querier = (*Queries)(nil)

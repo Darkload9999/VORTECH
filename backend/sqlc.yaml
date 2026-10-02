@@ -15,6 +15,8 @@ sql:
         emit_pointers_for_null_types: true
         rename:
           source_ip: SourceIP
+          ip_address: IPAddress
+          network_cidr: NetworkCIDR
         overrides:
           - db_type: uuid
             go_type: github.com/google/uuid.UUID

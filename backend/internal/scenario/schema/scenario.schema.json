@@ -1,0 +1,360 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vortech.invalid/schemas/scenario/v1",
+  "title": "VORTECH scenario (vortech/v1)",
+  "description": "Each scenario directory holds one YAML file per $defs entry below. Cross-file references (codes, usernames, object keys) are checked by the importer after schema validation.",
+
+  "$defs": {
+    "text": { "type": "string", "maxLength": 4000 },
+    "name": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "upperCode": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]{0,63}$" },
+    "deptCode": { "type": "string", "pattern": "^[A-Z][A-Z0-9_-]{0,31}$" },
+    "employeeCode": { "type": "string", "pattern": "^[A-Z][A-Z0-9-]{1,31}$" },
+    "assetCode": { "type": "string", "pattern": "^[A-Z][A-Z0-9-]{1,63}$" },
+    "username": { "type": "string", "pattern": "^[a-z][a-z0-9._-]{0,63}$" },
+    "objectKey": { "type": "string", "pattern": "^[a-z0-9][a-z0-9_.-]{0,127}$" },
+    "clock": { "type": "string", "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$" },
+    "criticality": { "enum": ["low", "medium", "high", "critical"] },
+    "attributes": {
+      "type": "object",
+      "maxProperties": 50,
+      "additionalProperties": { "type": ["string", "number", "boolean", "array"] }
+    },
+    "nodeRef": {
+      "description": "Graph endpoint: employee:<code>, identity:<username> or asset:<code>",
+      "type": "string",
+      "pattern": "^(employee:[A-Z][A-Z0-9-]{1,31}|identity:[a-z][a-z0-9._-]{0,63}|asset:[A-Z][A-Z0-9-]{1,63})$"
+    },
+
+    "scenario": {
+      "type": "object",
+      "additionalProperties": false,
+      "patternProperties": { "^x-": { "description": "Extension keys (e.g. YAML anchors) are ignored." } },
+      "required": ["apiVersion", "kind", "slug", "name", "version"],
+      "properties": {
+        "apiVersion": { "const": "vortech/v1" },
+        "kind": { "const": "Scenario" },
+        "slug": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{1,62}$" },
+        "name": { "$ref": "#/$defs/name" },
+        "version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+        "description": { "$ref": "#/$defs/text" }
+      }
+    },
+
+    "company": {
+      "type": "object",
+      "additionalProperties": false,
+      "patternProperties": { "^x-": { "description": "Extension keys (e.g. YAML anchors) are ignored." } },
+      "required": ["code", "name", "legal_name", "industry", "email_domain"],
+      "properties": {
+        "code": { "type": "string", "pattern": "^[A-Z][A-Z0-9_-]{1,31}$" },
+        "name": { "$ref": "#/$defs/name" },
+        "legal_name": { "$ref": "#/$defs/name" },
+        "industry": { "$ref": "#/$defs/name" },
+        "description": { "$ref": "#/$defs/text" },
+        "headquarters": { "$ref": "#/$defs/name" },
+        "founded_year": { "type": "integer", "minimum": 1800, "maximum": 2200 },
+        "email_domain": {
+          "description": "Fictional organisations only: must use a reserved TLD.",
+          "type": "string",
+          "pattern": "^([a-z0-9-]+\\.)+(local|test|example|internal|invalid)$"
+        }
+      }
+    },
+
+    "departments": {
+      "type": "object",
+      "additionalProperties": false,
+      "patternProperties": { "^x-": { "description": "Extension keys (e.g. YAML anchors) are ignored." } },
+      "required": ["departments"],
+      "properties": {
+        "departments": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 200,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["code", "name"],
+            "properties": {
+              "code": { "$ref": "#/$defs/deptCode" },
+              "name": { "$ref": "#/$defs/name" },
+              "description": { "$ref": "#/$defs/text" },
+              "parent": { "$ref": "#/$defs/deptCode" },
+              "head": { "$ref": "#/$defs/employeeCode" }
+            }
+          }
+        }
+      }
+    },
+
+    "groupList": {
+      "type": "array",
+      "maxItems": 50,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/assetCode" }
+    },
+
+    "employees": {
+      "type": "object",
+      "additionalProperties": false,
+      "patternProperties": { "^x-": { "description": "Extension keys (e.g. YAML anchors) are ignored." } },
+      "required": ["employees"],
+      "properties": {
+        "employees": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 5000,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["code", "first_name", "last_name", "job_title", "department"],
+            "properties": {
+              "code": { "$ref": "#/$defs/employeeCode" },
+              "first_name": { "$ref": "#/$defs/name" },
+              "last_name": { "$ref": "#/$defs/name" },
+              "display_name": { "$ref": "#/$defs/name" },
+              "job_title": { "$ref": "#/$defs/name" },
+              "department": { "$ref": "#/$defs/deptCode" },
+              "manager": { "$ref": "#/$defs/employeeCode" },
+              "location": { "$ref": "#/$defs/upperCode" },
+              "employment_type": { "enum": ["full_time", "part_time", "contractor"] },
+              "status": { "enum": ["active", "on_leave", "terminated"] },
+              "npc": { "type": "boolean" },
+              "persona": { "$ref": "#/$defs/text" },
+              "greeting": { "$ref": "#/$defs/text" },
+              "identity": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["username"],
+                "properties": {
+                  "username": { "$ref": "#/$defs/username" },
+                  "type": { "enum": ["user", "admin", "contractor"] },
+                  "status": { "enum": ["enabled", "disabled", "locked", "expired"] },
+                  "mfa": { "type": "boolean" },
+                  "privileged": { "type": "boolean" },
+                  "expires_at": { "type": "string", "format": "date-time" },
+                  "groups": { "$ref": "#/$defs/groupList" },
+                  "access": { "$ref": "#/$defs/groupList" }
+                }
+              },
+              "schedule": {
+                "type": "array",
+                "maxItems": 50,
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["days", "from", "to", "activity"],
+                  "properties": {
+                    "days": {
+                      "type": "array",
+                      "minItems": 1,
+                      "uniqueItems": true,
+                      "items": { "enum": ["mon", "tue", "wed", "thu", "fri", "sat", "sun", "weekdays", "weekend"] }
+                    },
+                    "from": { "$ref": "#/$defs/clock" },
+                    "to": { "$ref": "#/$defs/clock" },
+                    "location": { "$ref": "#/$defs/upperCode" },
+                    "activity": { "enum": ["working", "meeting", "break", "offsite", "on_call"] }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "service_accounts": {
+          "type": "array",
+          "maxItems": 500,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["username"],
+            "properties": {
+              "username": { "$ref": "#/$defs/username" },
+              "status": { "enum": ["enabled", "disabled", "locked", "expired"] },
+              "privileged": { "type": "boolean" },
+              "groups": { "$ref": "#/$defs/groupList" },
+              "access": { "$ref": "#/$defs/groupList" }
+            }
+          }
+        }
+      }
+    },
+
+    "network": {
+      "type": "object",
+      "additionalProperties": false,
+      "patternProperties": { "^x-": { "description": "Extension keys (e.g. YAML anchors) are ignored." } },
+      "required": ["networks"],
+      "properties": {
+        "networks": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 500,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["code", "name", "cidr"],
+            "properties": {
+              "code": { "$ref": "#/$defs/assetCode" },
+              "name": { "$ref": "#/$defs/name" },
+              "cidr": { "type": "string", "pattern": "^[0-9a-fA-F.:]+/[0-9]{1,3}$" },
+              "vlan": { "type": "integer", "minimum": 1, "maximum": 4094 },
+              "description": { "$ref": "#/$defs/text" },
+              "criticality": { "$ref": "#/$defs/criticality" },
+              "location": { "$ref": "#/$defs/upperCode" }
+            }
+          }
+        }
+      }
+    },
+
+    "assets": {
+      "type": "object",
+      "additionalProperties": false,
+      "patternProperties": { "^x-": { "description": "Extension keys (e.g. YAML anchors) are ignored." } },
+      "required": ["assets"],
+      "properties": {
+        "assets": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 20000,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["code", "name", "type"],
+            "properties": {
+              "code": { "$ref": "#/$defs/assetCode" },
+              "name": { "$ref": "#/$defs/name" },
+              "type": {
+                "enum": [
+                  "workstation", "laptop", "server", "virtual_machine", "network_device",
+                  "firewall", "application", "database", "identity_group",
+                  "cloud_resource", "printer", "iot_device", "mobile_device", "storage"
+                ]
+              },
+              "hostname": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9.-]{0,252}$" },
+              "ip": { "type": "string", "pattern": "^[0-9a-fA-F.:]+$" },
+              "os": { "$ref": "#/$defs/name" },
+              "criticality": { "$ref": "#/$defs/criticality" },
+              "status": { "enum": ["active", "maintenance", "decommissioned"] },
+              "department": { "$ref": "#/$defs/deptCode" },
+              "owner": { "$ref": "#/$defs/employeeCode" },
+              "location": { "$ref": "#/$defs/upperCode" },
+              "network": { "$ref": "#/$defs/assetCode" },
+              "hosted_on": { "$ref": "#/$defs/assetCode" },
+              "depends_on": { "$ref": "#/$defs/groupList" },
+              "description": { "$ref": "#/$defs/text" },
+              "attributes": { "$ref": "#/$defs/attributes" }
+            }
+          }
+        },
+        "relationships": {
+          "type": "array",
+          "maxItems": 50000,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["from", "type", "to"],
+            "properties": {
+              "from": { "$ref": "#/$defs/nodeRef" },
+              "to": { "$ref": "#/$defs/nodeRef" },
+              "type": {
+                "enum": [
+                  "OWNS", "USES", "MEMBER_OF", "CONNECTED_TO", "HOSTED_ON", "DEPENDS_ON",
+                  "HAS_ACCESS_TO", "MANAGES", "LOCATED_IN", "AUTHENTICATES_TO", "HAS_IDENTITY"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+
+    "world": {
+      "type": "object",
+      "additionalProperties": false,
+      "patternProperties": { "^x-": { "description": "Extension keys (e.g. YAML anchors) are ignored." } },
+      "required": ["zones", "locations"],
+      "properties": {
+        "zones": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 1000,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["code", "name", "kind"],
+            "properties": {
+              "code": { "$ref": "#/$defs/upperCode" },
+              "name": { "$ref": "#/$defs/name" },
+              "kind": { "enum": ["site", "building", "floor", "area"] },
+              "parent": { "$ref": "#/$defs/upperCode" },
+              "description": { "$ref": "#/$defs/text" },
+              "unlocked_by_default": { "type": "boolean" },
+              "required_career_rank": { "type": "integer", "minimum": 0, "maximum": 100 }
+            }
+          }
+        },
+        "locations": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 5000,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["code", "name", "kind", "zone"],
+            "properties": {
+              "code": { "$ref": "#/$defs/upperCode" },
+              "name": { "$ref": "#/$defs/name" },
+              "kind": {
+                "enum": [
+                  "lobby", "reception", "office", "open_office", "meeting_room", "soc",
+                  "lab", "server_room", "datacenter", "common_area", "corridor"
+                ]
+              },
+              "zone": { "$ref": "#/$defs/upperCode" },
+              "department": { "$ref": "#/$defs/deptCode" },
+              "description": { "$ref": "#/$defs/text" }
+            }
+          }
+        },
+        "objects": {
+          "type": "array",
+          "maxItems": 20000,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["key", "name", "kind", "location"],
+            "properties": {
+              "key": { "$ref": "#/$defs/objectKey" },
+              "name": { "$ref": "#/$defs/name" },
+              "kind": {
+                "enum": [
+                  "workstation", "server_rack", "door", "terminal", "document", "badge_reader",
+                  "printer", "whiteboard", "screen", "npc_spawn", "furniture"
+                ]
+              },
+              "location": { "$ref": "#/$defs/upperCode" },
+              "asset": { "$ref": "#/$defs/assetCode" },
+              "leads_to": { "$ref": "#/$defs/upperCode" },
+              "interactions": {
+                "type": "array",
+                "uniqueItems": true,
+                "items": {
+                  "enum": [
+                    "OPEN_DOOR", "CLOSE_DOOR", "USE_WORKSTATION", "INSPECT_OBJECT",
+                    "ACCESS_TERMINAL", "READ_DOCUMENT", "START_ENGAGEMENT"
+                  ]
+                }
+              },
+              "description": { "$ref": "#/$defs/text" },
+              "content": { "type": "string", "maxLength": 20000 },
+              "attributes": { "$ref": "#/$defs/attributes" }
+            }
+          }
+        }
+      }
+    }
+  }
+}
