@@ -8,17 +8,22 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
+	"github.com/Darkload9999/VORTECH/backend/internal/asset"
 	"github.com/Darkload9999/VORTECH/backend/internal/audit"
 	"github.com/Darkload9999/VORTECH/backend/internal/auth"
 	"github.com/Darkload9999/VORTECH/backend/internal/buildinfo"
+	"github.com/Darkload9999/VORTECH/backend/internal/company"
 	"github.com/Darkload9999/VORTECH/backend/internal/config"
 	"github.com/Darkload9999/VORTECH/backend/internal/database"
 	"github.com/Darkload9999/VORTECH/backend/internal/database/db"
+	"github.com/Darkload9999/VORTECH/backend/internal/employee"
 	"github.com/Darkload9999/VORTECH/backend/internal/health"
 	"github.com/Darkload9999/VORTECH/backend/internal/logging"
 	"github.com/Darkload9999/VORTECH/backend/internal/player"
 	"github.com/Darkload9999/VORTECH/backend/internal/server"
+	"github.com/Darkload9999/VORTECH/backend/internal/world"
 )
 
 func main() {
@@ -101,12 +106,19 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	// The active world changes only when a scenario is activated; a short
+	// cache avoids a lookup on every request.
+	companies := company.NewDirectory(queries, 10*time.Second)
 	handler := newHandler(deps{
-		cfg:     cfg,
-		log:     log,
-		health:  hs,
-		authn:   authn,
-		players: player.NewHandler(queries, log),
+		cfg:       cfg,
+		log:       log,
+		health:    hs,
+		authn:     authn,
+		players:   player.NewHandler(queries, log),
+		companies: company.NewHandler(companies, queries, log),
+		employees: employee.NewHandler(companies, queries, log),
+		assets:    asset.NewHandler(companies, queries, log),
+		world:     world.NewHandler(companies, queries, log),
 	})
 	srv := server.New(cfg.HTTP.Addr, handler, cfg.HTTP, log)
 
