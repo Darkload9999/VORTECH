@@ -24,3 +24,24 @@ type AuditLog struct {
 	SourceIP     *netip.Addr
 	Metadata     []byte
 }
+
+type Player struct {
+	ID          uuid.UUID
+	UserID      uuid.UUID
+	DisplayName string
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+}
+
+type User struct {
+	ID              uuid.UUID
+	KeycloakSubject string
+	Username        string
+	Email           *string
+	EmailVerified   bool
+	FullName        *string
+	Status          string
+	LastSeenAt      time.Time
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
+}

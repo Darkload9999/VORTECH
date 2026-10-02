@@ -11,10 +11,38 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
+
+	"github.com/vortech/backend/api"
+	"github.com/vortech/backend/internal/audit"
+	"github.com/vortech/backend/internal/auth"
+	"github.com/vortech/backend/internal/auth/authtest"
 	"github.com/vortech/backend/internal/config"
 	"github.com/vortech/backend/internal/health"
+	"github.com/vortech/backend/internal/player"
 	"github.com/vortech/backend/internal/requestid"
 )
+
+type stubResolver struct{}
+
+func (stubResolver) Resolve(_ context.Context, c *auth.Claims, _ auth.RoleSet) (auth.Identity, error) {
+	return auth.Identity{UserID: uuid.NewSHA1(uuid.NameSpaceOID, []byte(c.Subject))}, nil
+}
+
+type stubAudit struct{}
+
+func (stubAudit) Record(context.Context, audit.Entry) {}
+
+// newTestAuthenticator returns an authenticator trusting iss.
+func newTestAuthenticator(t *testing.T, iss *authtest.Issuer) *auth.Authenticator {
+	t.Helper()
+	log := slog.New(slog.DiscardHandler)
+	ks := auth.NewKeySet(iss.JWKSURL(), log)
+	if err := ks.Refresh(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	return auth.NewAuthenticator(auth.NewVerifier(ks, iss.VerifierConfig()), stubResolver{}, stubAudit{}, log)
+}
 
 func testConfig(t *testing.T) *config.Config {
 	t.Helper()
@@ -37,7 +65,14 @@ func newTestHandler(t *testing.T, dbErr error) (http.Handler, *health.Service) {
 		Name: "postgres",
 		Fn:   func(context.Context) error { return dbErr },
 	})
-	return newHandler(testConfig(t), log, hs), hs
+	h := newHandler(deps{
+		cfg:     testConfig(t),
+		log:     log,
+		health:  hs,
+		authn:   newTestAuthenticator(t, authtest.NewIssuer(t)),
+		players: player.NewHandler(nil, log),
+	})
+	return h, hs
 }
 
 func TestHealthEndpoint(t *testing.T) {
@@ -108,6 +143,95 @@ func TestUnknownRoutesUseErrorFormat(t *testing.T) {
 	rec = httptest.NewRecorder()
 	h.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/v1/health", nil))
 	if rec.Code != http.StatusMethodNotAllowed || !strings.Contains(rec.Body.String(), `"code":"METHOD_NOT_ALLOWED"`) {
+		t.Fatalf("got %d %s", rec.Code, rec.Body.String())
+	}
+}
+
+// protectedRoutes lists every non-probe route; each new route must be added
+// so the test below proves it is not reachable anonymously.
+var protectedRoutes = []struct{ method, path string }{
+	{http.MethodGet, "/api/v1/me"},
+}
+
+func TestEveryRouteRequiresAuthentication(t *testing.T) {
+	h, _ := newTestHandler(t, nil)
+	for _, rt := range protectedRoutes {
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, httptest.NewRequest(rt.method, rt.path, nil))
+		if rec.Code != http.StatusUnauthorized || !strings.Contains(rec.Body.String(), `"code":"UNAUTHORIZED"`) {
+			t.Errorf("%s %s without token: got %d %s", rt.method, rt.path, rec.Code, rec.Body.String())
+		}
+	}
+}
+
+// publicRoutes are deliberately reachable without a token.
+var publicRoutes = []struct{ method, path string }{
+	{http.MethodGet, "/api/v1/health"},
+	{http.MethodGet, "/api/v1/ready"},
+	{http.MethodGet, "/api/v1/openapi.json"},
+}
+
+func TestOpenAPIDocumentsEveryRoute(t *testing.T) {
+	var doc struct {
+		OpenAPI string                               `json:"openapi"`
+		Paths   map[string]map[string]map[string]any `json:"paths"`
+	}
+	if err := json.Unmarshal(api.OpenAPI, &doc); err != nil {
+		t.Fatalf("openapi.json is not valid JSON: %v", err)
+	}
+	if doc.OpenAPI != "3.1.0" {
+		t.Fatalf("openapi version = %q", doc.OpenAPI)
+	}
+	all := append(append([]struct{ method, path string }{}, publicRoutes...), protectedRoutes...)
+	for _, rt := range all {
+		if _, ok := doc.Paths[rt.path][strings.ToLower(rt.method)]; !ok {
+			t.Errorf("%s %s is not documented in api/openapi.json", rt.method, rt.path)
+		}
+	}
+	for path, ops := range doc.Paths {
+		for method, op := range ops {
+			sec, hasSec := op["security"].([]any)
+			public := hasSec && len(sec) == 0
+			isPublic := false
+			for _, rt := range publicRoutes {
+				if rt.path == path && strings.ToLower(rt.method) == method {
+					isPublic = true
+				}
+			}
+			if public != isPublic {
+				t.Errorf("%s %s: OpenAPI security does not match route protection", method, path)
+			}
+		}
+	}
+}
+
+func TestOpenAPIServed(t *testing.T) {
+	h, _ := newTestHandler(t, nil)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/openapi.json", nil))
+	if rec.Code != http.StatusOK || !json.Valid(rec.Body.Bytes()) {
+		t.Fatalf("got %d", rec.Code)
+	}
+}
+
+func TestMeRequiresAPlatformRole(t *testing.T) {
+	iss := authtest.NewIssuer(t)
+	log := slog.New(slog.DiscardHandler)
+	h := newHandler(deps{
+		cfg:     testConfig(t),
+		log:     log,
+		health:  health.New(log, time.Second, 0),
+		authn:   newTestAuthenticator(t, iss),
+		players: player.NewHandler(nil, log),
+	})
+
+	// A Keycloak account holding none of the platform roles is
+	// authenticated but not authorised.
+	r := httptest.NewRequest(http.MethodGet, "/api/v1/me", nil)
+	r.Header.Set("Authorization", "Bearer "+iss.Token(t, "no-roles"))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, r)
+	if rec.Code != http.StatusForbidden {
 		t.Fatalf("got %d %s", rec.Code, rec.Body.String())
 	}
 }

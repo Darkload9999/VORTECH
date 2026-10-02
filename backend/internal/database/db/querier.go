@@ -6,13 +6,24 @@ package db
 
 import (
 	"context"
+
+	"github.com/google/uuid"
 )
 
 type Querier interface {
+	GetPlayerIDByUserID(ctx context.Context, userID uuid.UUID) (uuid.UUID, error)
+	// The user together with their player profile, if any.
+	GetUserProfile(ctx context.Context, userID uuid.UUID) (GetUserProfileRow, error)
 	InsertAuditLog(ctx context.Context, arg InsertAuditLogParams) (InsertAuditLogRow, error)
+	// Returns the new player's id, or no rows if the user already has one.
+	InsertPlayerIfMissing(ctx context.Context, arg InsertPlayerIfMissingParams) (uuid.UUID, error)
 	// Newest first with keyset pagination: pass the (occurred_at, id) of the
 	// last row of the previous page as the cursor, or NULLs for the first page.
 	ListAuditLogs(ctx context.Context, arg ListAuditLogsParams) ([]AuditLog, error)
+	// Creates the user on first sight and refreshes the mirrored profile
+	// otherwise. The update always runs (last_seen_at changes) so RETURNING
+	// yields a row in both cases; xmax = 0 identifies a fresh insert.
+	UpsertUserFromToken(ctx context.Context, arg UpsertUserFromTokenParams) (UpsertUserFromTokenRow, error)
 }
 
 var _ Querier = (*Queries)(nil)
