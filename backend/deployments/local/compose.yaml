@@ -1,11 +1,11 @@
 # Local development stack. NOT for production.
 #
-#   make db-up                 PostgreSQL only (run the API on the host with `make run-api`)
-#   make compose-up            PostgreSQL + migrate job + API + worker in containers
+#   make deps-up               PostgreSQL + Keycloak (run the API on the host with `make run-api`)
+#   make db-up                 PostgreSQL only
+#   make compose-up            dependencies + migrate job + API + worker in containers
 #
-# Every published port binds to 127.0.0.1 only. The default password below
-# is a development-only placeholder; override it via POSTGRES_PASSWORD in
-# backend/.env if you prefer.
+# Every published port binds to 127.0.0.1 only. Default passwords below are
+# development-only placeholders; override them in backend/.env if you prefer.
 
 name: vortech
 
@@ -27,6 +27,12 @@ x-backend: &backend
     DATABASE_URL: postgres://vortech:${POSTGRES_PASSWORD:-vortech_dev_only}@postgres:5432/vortech?sslmode=disable
     # The dedicated migrate service owns schema changes in this stack.
     DATABASE_AUTO_MIGRATE: "false"
+    # Issuer as browsers see it; signing keys fetched over the compose network.
+    KEYCLOAK_URL: http://localhost:${KEYCLOAK_HOST_PORT:-8180}/auth
+    KEYCLOAK_INTERNAL_URL: http://keycloak:8080/auth
+    KEYCLOAK_REALM: vortech
+    KEYCLOAK_CLIENT_ID: vortech-web
+    KEYCLOAK_AUDIENCE: vortech-api
   depends_on:
     postgres:
       condition: service_healthy
@@ -59,6 +65,58 @@ services:
       retries: 30
     shm_size: 256mb
 
+  keycloak-db-init:
+    image: postgres:18-alpine
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD:-vortech_dev_only}
+      KEYCLOAK_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD:-keycloak_dev_only}
+    entrypoint:
+      - sh
+      - -c
+      - psql -h postgres -U vortech -d postgres -v ON_ERROR_STOP=1 -v kcpass="$$KEYCLOAK_DB_PASSWORD" -f /init/init-db.sql
+    volumes:
+      - ./keycloak/init-db.sql:/init/init-db.sql:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  # Keycloak in dev mode, served under /auth like production (OpenResty
+  # routes /auth/* to Keycloak). The realm is imported on first start only;
+  # `make keycloak-reset` re-imports it.
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.8.0
+    command: ["start-dev", "--import-realm"]
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD:-keycloak_dev_only}
+      KC_HTTP_RELATIVE_PATH: /auth
+      KC_HOSTNAME: http://localhost:${KEYCLOAK_HOST_PORT:-8180}/auth
+      KC_HEALTH_ENABLED: "true"
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin_dev_only}
+    ports:
+      - "127.0.0.1:${KEYCLOAK_HOST_PORT:-8180}:8080"
+    volumes:
+      - ./keycloak/realm:/opt/keycloak/data/import:ro
+    healthcheck:
+      # The image has no curl; probe the management port with bash.
+      test:
+        - CMD-SHELL
+        - >-
+          exec 3<>/dev/tcp/127.0.0.1/9000 &&
+          printf 'GET /auth/health/ready HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3 &&
+          grep -q '"status": "UP"' <&3
+      interval: 5s
+      timeout: 5s
+      retries: 60
+      start_period: 20s
+    depends_on:
+      keycloak-db-init:
+        condition: service_completed_successfully
+
   migrate:
     <<: *backend
     profiles: ["app"]
@@ -77,6 +135,13 @@ services:
       HTTP_TRUSTED_PROXIES: ""
     ports:
       - "127.0.0.1:${API_HOST_PORT:-8080}:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+      keycloak:
+        condition: service_started
     healthcheck:
       test: ["CMD", "/app/api", "-healthcheck"]
       interval: 5s

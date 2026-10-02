@@ -1,0 +1,196 @@
+{
+  "realm": "vortech",
+  "displayName": "VORTECH",
+  "enabled": true,
+  "sslRequired": "external",
+
+  "registrationAllowed": true,
+  "registrationEmailAsUsername": false,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "editUsernameAllowed": false,
+  "resetPasswordAllowed": false,
+  "verifyEmail": false,
+  "rememberMe": false,
+
+  "bruteForceProtected": true,
+  "permanentLockout": false,
+  "failureFactor": 5,
+  "waitIncrementSeconds": 60,
+  "maxFailureWaitSeconds": 900,
+  "maxDeltaTimeSeconds": 43200,
+  "quickLoginCheckMilliSeconds": 1000,
+  "minimumQuickLoginWaitSeconds": 60,
+
+  "accessTokenLifespan": 300,
+  "accessCodeLifespan": 60,
+  "ssoSessionIdleTimeout": 1800,
+  "ssoSessionMaxLifespan": 36000,
+  "revokeRefreshToken": true,
+  "refreshTokenMaxReuse": 0,
+
+  "passwordPolicy": "length(12) and maxLength(128) and notUsername and notEmail and passwordHistory(3)",
+
+  "otpPolicyType": "totp",
+  "otpPolicyAlgorithm": "HmacSHA1",
+  "otpPolicyDigits": 6,
+  "otpPolicyPeriod": 30,
+  "otpPolicyLookAheadWindow": 1,
+
+  "webAuthnPolicyRpEntityName": "VORTECH",
+  "webAuthnPolicyUserVerificationRequirement": "preferred",
+  "webAuthnPolicyPasswordlessRpEntityName": "VORTECH",
+  "webAuthnPolicyPasswordlessUserVerificationRequirement": "required",
+  "webAuthnPolicyPasswordlessResidentKey": "required",
+  "webAuthnPolicyPasswordlessPasskeysEnabled": true,
+
+  "eventsEnabled": true,
+  "eventsExpiration": 604800,
+  "adminEventsEnabled": true,
+  "adminEventsDetailsEnabled": false,
+
+  "roles": {
+    "realm": [
+      {
+        "name": "PLAYER",
+        "description": "Plays scenarios and uses their own cyber ranges and evidence."
+      },
+      {
+        "name": "INSTRUCTOR",
+        "description": "Views assigned students, assigns scenarios, reviews progress."
+      },
+      {
+        "name": "SCENARIO_CREATOR",
+        "description": "Creates, edits and publishes scenarios."
+      },
+      {
+        "name": "ADMIN",
+        "description": "Platform administration."
+      },
+      {
+        "name": "default-roles-vortech",
+        "description": "Granted to every new account. Offline tokens stay unavailable to vortech-web because the offline_access client scope is not assigned to it.",
+        "composite": true,
+        "composites": {
+          "realm": ["PLAYER"],
+          "client": {
+            "account": ["view-profile", "manage-account"]
+          }
+        }
+      }
+    ]
+  },
+  "defaultRole": {
+    "name": "default-roles-vortech"
+  },
+
+  "clients": [
+    {
+      "clientId": "vortech-web",
+      "name": "VORTECH Web",
+      "description": "Browser SPA. Public client: Authorization Code + PKCE (S256) only.",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "frontchannelLogout": true,
+      "fullScopeAllowed": true,
+      "rootUrl": "http://localhost:5173",
+      "baseUrl": "/",
+      "redirectUris": ["http://localhost:5173/*"],
+      "webOrigins": ["http://localhost:5173"],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "http://localhost:5173/*",
+        "oauth2.device.authorization.grant.enabled": "false",
+        "oidc.ciba.grant.enabled": "false",
+        "use.refresh.tokens": "true"
+      },
+      "defaultClientScopes": ["basic", "acr", "web-origins", "roles", "profile", "email"],
+      "optionalClientScopes": [],
+      "protocolMappers": [
+        {
+          "name": "audience-vortech-api",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.client.audience": "vortech-api",
+            "access.token.claim": "true",
+            "id.token.claim": "false",
+            "introspection.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "clientId": "vortech-api",
+      "name": "VORTECH API",
+      "description": "Resource server identity used as the access-token audience. Has no login flows.",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "bearerOnly": true,
+      "publicClient": false,
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false
+    }
+  ],
+
+  "users": [
+    {
+      "username": "player1",
+      "enabled": true,
+      "email": "player1@vortech.test",
+      "emailVerified": true,
+      "firstName": "Pat",
+      "lastName": "Player",
+      "credentials": [{ "type": "password", "value": "Player1-dev-only-pw", "temporary": false }],
+      "realmRoles": ["default-roles-vortech"]
+    },
+    {
+      "username": "instructor1",
+      "enabled": true,
+      "email": "instructor1@vortech.test",
+      "emailVerified": true,
+      "firstName": "Ira",
+      "lastName": "Instructor",
+      "credentials": [{ "type": "password", "value": "Instructor1-dev-only-pw", "temporary": false }],
+      "realmRoles": ["default-roles-vortech", "INSTRUCTOR"]
+    },
+    {
+      "username": "creator1",
+      "enabled": true,
+      "email": "creator1@vortech.test",
+      "emailVerified": true,
+      "firstName": "Casey",
+      "lastName": "Creator",
+      "credentials": [{ "type": "password", "value": "Creator1-dev-only-pw", "temporary": false }],
+      "realmRoles": ["default-roles-vortech", "SCENARIO_CREATOR"]
+    },
+    {
+      "username": "admin1",
+      "enabled": true,
+      "email": "admin1@vortech.test",
+      "emailVerified": true,
+      "firstName": "Ada",
+      "lastName": "Admin",
+      "credentials": [{ "type": "password", "value": "Admin1-dev-only-pw", "temporary": false }],
+      "realmRoles": ["default-roles-vortech", "ADMIN"]
+    },
+    {
+      "username": "outsider1",
+      "enabled": true,
+      "email": "outsider1@vortech.test",
+      "emailVerified": true,
+      "firstName": "Oz",
+      "lastName": "Outsider",
+      "credentials": [{ "type": "password", "value": "Outsider1-dev-only-pw", "temporary": false }],
+      "realmRoles": []
+    }
+  ]
+}

@@ -33,6 +33,8 @@ COMPOSE := docker compose -f deployments/local/compose.yaml
 # Integration tests create and drop their own database through this
 # maintenance connection.
 TEST_DATABASE_URL ?= postgres://vortech:$(or $(POSTGRES_PASSWORD),vortech_dev_only)@127.0.0.1:$(or $(POSTGRES_HOST_PORT),55432)/postgres?sslmode=disable
+# End-to-end auth tests run against the dev Keycloak; set empty to skip them.
+TEST_KEYCLOAK_URL ?= http://localhost:$(or $(KEYCLOAK_HOST_PORT),8180)/auth
 
 ##@ Help
 .PHONY: help
@@ -79,8 +81,9 @@ test: ## Run unit tests with the race detector
 	go test -race -count=1 ./...
 
 .PHONY: test-integration
-test-integration: ## Run integration tests against the compose PostgreSQL (make db-up first)
-	TEST_DATABASE_URL='$(TEST_DATABASE_URL)' go test -race -count=1 -tags integration ./tests/integration/...
+test-integration: ## Integration tests against compose PostgreSQL + Keycloak (make deps-up first)
+	TEST_DATABASE_URL='$(TEST_DATABASE_URL)' TEST_KEYCLOAK_URL='$(TEST_KEYCLOAK_URL)' \
+		go test -race -count=1 -tags integration ./tests/integration/...
 
 .PHONY: cover
 cover: ## Unit test coverage report (coverage.html)
@@ -113,6 +116,29 @@ run-api: ## Run the API on the host (uses .env)
 .PHONY: run-worker
 run-worker: ## Run the worker on the host (uses .env)
 	go run ./cmd/worker
+
+##@ Dependencies
+.PHONY: deps-up
+deps-up: ## Start PostgreSQL and Keycloak and wait until healthy
+	$(COMPOSE) up -d --wait postgres keycloak
+
+.PHONY: keycloak-up
+keycloak-up: ## Start Keycloak (and PostgreSQL) and wait until healthy
+	$(COMPOSE) up -d --wait keycloak
+
+.PHONY: keycloak-reset
+keycloak-reset: ## Drop Keycloak's database and re-import the dev realm
+	$(COMPOSE) rm -sf keycloak
+	$(COMPOSE) exec -T postgres psql -U vortech -d postgres -c 'DROP DATABASE IF EXISTS keycloak WITH (FORCE)'
+	$(COMPOSE) up -d --wait keycloak
+
+.PHONY: keycloak-logs
+keycloak-logs: ## Follow Keycloak logs
+	$(COMPOSE) logs -f keycloak
+
+.PHONY: dev-token
+dev-token: ## Print an access token via PKCE login: make dev-token AS=player1
+	@go run ./cmd/devtoken -user $(or $(AS),player1)
 
 ##@ Database
 .PHONY: db-up
