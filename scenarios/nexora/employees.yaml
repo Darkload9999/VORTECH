@@ -1,0 +1,389 @@
+# NEXORA staff. All people are fictional. Each employee is a deterministic NPC
+# with a fictional directory identity (<username>@nexora.local); these are game
+# data, never real platform accounts.
+#
+# Schedule entries without a location use the employee's home location.
+
+x-schedules:
+  office: &office
+    - { days: [weekdays], from: "09:00", to: "12:00", activity: working }
+    - { days: [weekdays], from: "12:00", to: "13:00", activity: break }
+    - { days: [weekdays], from: "13:00", to: "17:30", activity: working }
+  early: &early
+    - { days: [weekdays], from: "07:30", to: "12:00", activity: working }
+    - { days: [weekdays], from: "12:00", to: "12:30", activity: break }
+    - { days: [weekdays], from: "12:30", to: "16:00", activity: working }
+  soc_day: &soc_day
+    - { days: [mon, tue, wed, thu], from: "07:00", to: "19:00", activity: on_call }
+  soc_swing: &soc_swing
+    - { days: [thu, fri, sat, sun], from: "07:00", to: "19:00", activity: on_call }
+
+employees:
+  # --- Executive ------------------------------------------------------------
+  - code: EMP-0001
+    first_name: Helena
+    last_name: Marsh
+    job_title: Chief Executive Officer
+    department: EXEC
+    location: EXEC_SUITE
+    persona: Decisive, time-poor, wants security risk explained in business terms.
+    greeting: "Make it quick, I have the board at ten. What's the risk and what's the cost?"
+    identity: { username: helena, mfa: true, groups: [GRP-ALL-STAFF, GRP-EXECUTIVES, GRP-VPN-USERS], access: [APP-MAIL, APP-PORTAL] }
+    schedule:
+      - { days: [mon, wed], from: "08:00", to: "10:00", location: BOARDROOM, activity: meeting }
+      - { days: [mon, wed], from: "10:00", to: "18:00", activity: working }
+      - { days: [tue, thu, fri], from: "08:00", to: "18:00", activity: working }
+  - code: EMP-0003
+    first_name: Priya
+    last_name: Raman
+    job_title: Chief Operating Officer
+    department: EXEC
+    manager: EMP-0001
+    location: EXEC_SUITE
+    persona: Process-minded; tracks every outage in minutes of lost production.
+    greeting: "If this is about downtime, I want numbers."
+    identity: { username: priya, mfa: true, groups: [GRP-ALL-STAFF, GRP-EXECUTIVES, GRP-VPN-USERS], access: [APP-MAIL, APP-LEDGER] }
+    schedule: *office
+  - code: EMP-0004
+    first_name: Tom
+    last_name: Becker
+    job_title: Executive Assistant
+    department: EXEC
+    manager: EMP-0001
+    location: EXEC_SUITE
+    persona: Friendly gatekeeper to the executives; handles their calendars and email delegation.
+    greeting: "Helena's calendar is packed, but I might squeeze you in."
+    identity: { username: tom, groups: [GRP-ALL-STAFF, GRP-EXECUTIVES], access: [APP-MAIL] }
+    schedule: *office
+
+  # --- Human Resources ------------------------------------------------------
+  - code: EMP-0005
+    first_name: Grace
+    last_name: Lindqvist
+    job_title: HR Director
+    department: HR
+    manager: EMP-0003
+    location: HR_OFFICE
+    persona: Protective of employee data; insists on proper process for any request.
+    greeting: "Employee records are confidential. What do you need, and who approved it?"
+    identity: { username: grace, mfa: true, groups: [GRP-ALL-STAFF, GRP-HR], access: [APP-PEOPLEDESK, APP-MAIL] }
+    schedule: *office
+  - code: EMP-0006
+    first_name: Marcus
+    last_name: Bell
+    job_title: HR Generalist
+    department: HR
+    manager: EMP-0005
+    location: HR_OFFICE
+    persona: Handles onboarding and offboarding tickets, often in a hurry.
+    greeting: "Another new starter on Monday and their laptop isn't ready yet."
+    identity: { username: marcus, groups: [GRP-ALL-STAFF, GRP-HR], access: [APP-PEOPLEDESK, APP-MAIL] }
+    schedule: *office
+  - code: EMP-0007
+    first_name: Aisha
+    last_name: Karim
+    job_title: Talent Recruiter
+    department: HR
+    manager: EMP-0005
+    location: HR_OFFICE
+    persona: Opens a lot of CVs and attachments from strangers.
+    greeting: "I get fifty CVs a day. Half of them are zip files, is that normal?"
+    identity: { username: aisha, groups: [GRP-ALL-STAFF, GRP-HR], access: [APP-PEOPLEDESK, APP-MAIL] }
+    schedule: *office
+
+  # --- Finance --------------------------------------------------------------
+  - code: EMP-0002
+    first_name: Victor
+    last_name: Okafor
+    job_title: Chief Financial Officer
+    department: FIN
+    manager: EMP-0001
+    location: FINANCE_DEPT
+    persona: Cautious with money, impatient with process that slows payments.
+    greeting: "Security is fine as long as it doesn't delay the quarter close."
+    identity: { username: victor, mfa: true, groups: [GRP-ALL-STAFF, GRP-FINANCE, GRP-EXECUTIVES, GRP-VPN-USERS], access: [APP-LEDGER, APP-MAIL] }
+    schedule: *office
+  - code: EMP-0008
+    first_name: Daniel
+    last_name: Reyes
+    job_title: Finance Manager
+    department: FIN
+    manager: EMP-0002
+    location: FINANCE_DEPT
+    persona: Owns the quarter-close process and the vendor master data.
+    greeting: "If you're here about the Ledger upgrade, ask Engineering."
+    identity: { username: daniel, groups: [GRP-ALL-STAFF, GRP-FINANCE, GRP-VPN-USERS], access: [APP-LEDGER, DB-FINANCE, APP-MAIL] }
+    schedule: *office
+  - code: EMP-0018
+    first_name: Alex
+    last_name: Morgan
+    job_title: Senior Accountant
+    department: FIN
+    manager: EMP-0008
+    location: FINANCE_DEPT
+    persona: Helpful and trusting; reuses the same password "because the app forces changes anyway".
+    greeting: "Hi! Is this about my computer being slow again?"
+    identity: { username: alex, groups: [GRP-ALL-STAFF, GRP-FINANCE], access: [APP-LEDGER, APP-MAIL] }
+    schedule: *office
+  - code: EMP-0009
+    first_name: Sofia
+    last_name: Novak
+    job_title: Accounts Payable Specialist
+    department: FIN
+    manager: EMP-0008
+    location: FINANCE_DEPT
+    persona: Processes vendor invoices and bank-detail change requests.
+    greeting: "A vendor emailed to change their bank account. That's routine, right?"
+    identity: { username: sofia, groups: [GRP-ALL-STAFF, GRP-FINANCE], access: [APP-LEDGER, APP-MAIL] }
+    schedule: *office
+  - code: EMP-0010
+    first_name: Liam
+    last_name: Carter
+    job_title: Payroll Specialist
+    department: FIN
+    manager: EMP-0008
+    location: FINANCE_DEPT
+    persona: Exports payroll files every Friday.
+    greeting: "Payroll runs Friday. Please don't break anything before then."
+    identity: { username: liam, groups: [GRP-ALL-STAFF, GRP-FINANCE], access: [APP-LEDGER, APP-PEOPLEDESK, APP-MAIL] }
+    schedule: *early
+  - code: EMP-0030
+    first_name: Paul
+    last_name: Grant
+    job_title: Branch Accountant
+    department: FIN
+    manager: EMP-0008
+    location: BRANCH_OPEN_OFFICE
+    persona: The only finance person at the branch; connects to HQ over the site VPN.
+    greeting: "Out here we make do with what HQ sends us."
+    identity: { username: paul, groups: [GRP-ALL-STAFF, GRP-FINANCE], access: [APP-LEDGER, APP-MAIL] }
+    schedule: *office
+
+  # --- Engineering ----------------------------------------------------------
+  - code: EMP-0011
+    first_name: Hiro
+    last_name: Tanaka
+    job_title: VP of Engineering
+    department: ENG
+    manager: EMP-0003
+    location: ENGINEERING_BULLPEN
+    persona: Ships fast; sees security reviews as a necessary negotiation.
+    greeting: "We can fix it next sprint. Is it actually exploitable?"
+    identity: { username: hiro, mfa: true, groups: [GRP-ALL-STAFF, GRP-ENGINEERING, GRP-VPN-USERS], access: [APP-CODEVAULT, APP-PORTAL, APP-MAIL] }
+    schedule: *office
+  - code: EMP-0012
+    first_name: Elena
+    last_name: Petrova
+    job_title: Senior Backend Engineer
+    department: ENG
+    manager: EMP-0011
+    location: ENGINEERING_BULLPEN
+    persona: Maintains the Ledger application and its database migrations.
+    greeting: "The Ledger code is older than half this team."
+    identity: { username: elena, groups: [GRP-ALL-STAFF, GRP-ENGINEERING, GRP-VPN-USERS], access: [APP-CODEVAULT, APP-LEDGER, DB-FINANCE] }
+    schedule: *office
+  - code: EMP-0013
+    first_name: Sam
+    last_name: Wilson
+    job_title: DevOps Engineer
+    department: ENG
+    manager: EMP-0011
+    location: ENGINEERING_BULLPEN
+    persona: Owns CI/CD and deployments; keeps a few long-lived tokens "for emergencies".
+    greeting: "Deploys are automated. Mostly. Don't look at the cron jobs."
+    identity: { username: sam, privileged: true, groups: [GRP-ALL-STAFF, GRP-ENGINEERING, GRP-VPN-USERS], access: [APP-CODEVAULT, SRV-HQ-APP01, SRV-HQ-WEB01, CLOUD-S3-BACKUPS] }
+    schedule: *early
+  - code: EMP-0014
+    first_name: Nadia
+    last_name: Haddad
+    job_title: Frontend Engineer
+    department: ENG
+    manager: EMP-0011
+    location: ENGINEERING_BULLPEN
+    persona: Builds the customer portal UI.
+    greeting: "The portal looks great. Security is the backend's problem, right?"
+    identity: { username: nadia, groups: [GRP-ALL-STAFF, GRP-ENGINEERING], access: [APP-CODEVAULT, APP-PORTAL] }
+    schedule: *office
+  - code: EMP-0015
+    first_name: Chris
+    last_name: Doyle
+    job_title: QA Engineer
+    department: ENG
+    manager: EMP-0011
+    location: ENGINEERING_BULLPEN
+    persona: Keeps test accounts with simple passwords in every environment.
+    greeting: "My test users? They're all 'Welcome1', it's just test data."
+    identity: { username: chris, groups: [GRP-ALL-STAFF, GRP-ENGINEERING], access: [APP-CODEVAULT, APP-PORTAL] }
+    schedule: *office
+  - code: EMP-0016
+    first_name: Jordan
+    last_name: Lee
+    job_title: Contract Developer
+    department: ENG
+    manager: EMP-0012
+    location: ENGINEERING_BULLPEN
+    employment_type: contractor
+    persona: Six-month contractor on the Ledger rewrite; access should expire at contract end.
+    greeting: "I'm only here until the rewrite ships. Hopefully."
+    identity: { username: jordan, expires_at: "2026-12-31T23:59:59Z", groups: [GRP-ALL-STAFF, GRP-ENGINEERING, GRP-VPN-USERS], access: [APP-CODEVAULT] }
+    schedule:
+      - { days: [mon, tue, wed], from: "10:00", to: "18:00", activity: working }
+      - { days: [thu, fri], from: "10:00", to: "18:00", activity: offsite }
+
+  # --- IT -------------------------------------------------------------------
+  - code: EMP-0017
+    first_name: Ben
+    last_name: Adeyemi
+    job_title: IT Manager
+    department: IT
+    manager: EMP-0003
+    location: IT_OFFICE
+    persona: Stretched thin; prioritises uptime over hardening.
+    greeting: "Whatever it is, file a ticket and I'll get to it. Eventually."
+    identity: { username: ben, mfa: true, privileged: true, type: admin, groups: [GRP-ALL-STAFF, GRP-IT-ADMINS, GRP-VPN-USERS], access: [SRV-HQ-DC01, APP-MAIL] }
+    schedule: *office
+  - code: EMP-0019
+    first_name: Maya
+    last_name: Collins
+    job_title: Systems Administrator
+    department: IT
+    manager: EMP-0017
+    location: IT_OFFICE
+    persona: Knows where every server is and which ones nobody dares to reboot.
+    greeting: "DC01 has been up for 400 days. Please don't touch it."
+    identity: { username: maya, mfa: true, privileged: true, type: admin, groups: [GRP-ALL-STAFF, GRP-IT-ADMINS, GRP-DOMAIN-ADMINS, GRP-VPN-USERS], access: [SRV-HQ-DC01, SRV-HQ-JUMP01, SRV-HQ-FS01] }
+    schedule: *early
+  - code: EMP-0020
+    first_name: Omar
+    last_name: Farouk
+    job_title: Helpdesk Technician
+    department: IT
+    manager: EMP-0017
+    location: IT_OFFICE
+    persona: Resets passwords all day; sometimes skips caller verification when busy.
+    greeting: "Locked out again? Tell me your username and I'll reset it."
+    identity: { username: omar, groups: [GRP-ALL-STAFF, GRP-IT-ADMINS], access: [APP-PEOPLEDESK] }
+    schedule: *office
+  - code: EMP-0021
+    first_name: Kate
+    last_name: Sullivan
+    job_title: Network Engineer
+    department: IT
+    manager: EMP-0017
+    location: IT_OFFICE
+    persona: Manages firewalls and VLANs; the firewall rule base has grown for years.
+    greeting: "Every rule in that firewall was 'temporary' once."
+    identity: { username: kate, mfa: true, privileged: true, groups: [GRP-ALL-STAFF, GRP-IT-ADMINS, GRP-VPN-USERS], access: [NET-DEV-FW-HQ01, NET-DEV-VPN01, SRV-HQ-JUMP01] }
+    schedule: *office
+  - code: EMP-0031
+    first_name: Leah
+    last_name: Morris
+    job_title: Branch IT Support
+    department: IT
+    manager: EMP-0017
+    location: BRANCH_OPEN_OFFICE
+    persona: The branch's only IT person; keeps a spare admin laptop in a drawer.
+    greeting: "HQ forgets we exist until the VPN goes down."
+    identity: { username: leah, groups: [GRP-ALL-STAFF, GRP-IT-ADMINS], access: [NET-DEV-FW-BR01] }
+    schedule: *office
+
+  # --- Cybersecurity --------------------------------------------------------
+  - code: EMP-0022
+    first_name: Rachel
+    last_name: Stone
+    job_title: Chief Information Security Officer
+    department: SEC
+    manager: EMP-0001
+    location: SECURITY_OFFICE
+    persona: Building the security programme from scratch; your sponsor for engagements.
+    greeting: "Welcome to the team. Every engagement starts with a signed scope. No exceptions."
+    identity: { username: rachel, mfa: true, groups: [GRP-ALL-STAFF, GRP-SECURITY, GRP-VPN-USERS], access: [APP-WATCHTOWER, APP-MAIL] }
+    schedule: *office
+  - code: EMP-0023
+    first_name: Ivan
+    last_name: Kowalski
+    job_title: Security Architect
+    department: SEC
+    manager: EMP-0022
+    location: SECURITY_OFFICE
+    persona: Keeps the asset inventory and network diagrams, and knows they are out of date.
+    greeting: "The diagram is from last year. Reality has drifted."
+    identity: { username: ivan, mfa: true, groups: [GRP-ALL-STAFF, GRP-SECURITY], access: [APP-WATCHTOWER, APP-CODEVAULT] }
+    schedule: *office
+
+  # --- SOC ------------------------------------------------------------------
+  - code: EMP-0024
+    first_name: Lena
+    last_name: Fischer
+    job_title: SOC Manager
+    department: SOC
+    manager: EMP-0022
+    location: SOC_FLOOR
+    persona: Calm under pressure; measures everything in mean time to detect.
+    greeting: "If it didn't make it into WatchTower, it didn't happen."
+    identity: { username: lena, mfa: true, groups: [GRP-ALL-STAFF, GRP-SECURITY, GRP-SOC-ANALYSTS], access: [APP-WATCHTOWER] }
+    schedule: *office
+  - code: EMP-0025
+    first_name: Tariq
+    last_name: Aziz
+    job_title: SOC Analyst II
+    department: SOC
+    manager: EMP-0024
+    location: SOC_FLOOR
+    persona: Seasoned triager; skeptical of every "false positive".
+    greeting: "Two high alerts on VPN01 this morning. Want to take a look?"
+    identity: { username: tariq, mfa: true, groups: [GRP-ALL-STAFF, GRP-SECURITY, GRP-SOC-ANALYSTS], access: [APP-WATCHTOWER] }
+    schedule: *soc_day
+  - code: EMP-0026
+    first_name: Mei
+    last_name: Chen
+    job_title: SOC Analyst I
+    department: SOC
+    manager: EMP-0024
+    location: SOC_FLOOR
+    persona: New and eager; asks great questions.
+    greeting: "Is it normal for svc-backup to log in at 3 AM?"
+    identity: { username: mei, mfa: true, groups: [GRP-ALL-STAFF, GRP-SECURITY, GRP-SOC-ANALYSTS], access: [APP-WATCHTOWER] }
+    schedule: *soc_swing
+  - code: EMP-0027
+    first_name: Diego
+    last_name: Alvarez
+    job_title: Threat Hunter
+    department: SOC
+    manager: EMP-0024
+    location: SOC_FLOOR
+    persona: Hunts for what the alerts miss.
+    greeting: "Alerts are what the attacker let you see."
+    identity: { username: diego, mfa: true, groups: [GRP-ALL-STAFF, GRP-SECURITY, GRP-SOC-ANALYSTS], access: [APP-WATCHTOWER, SRV-HQ-SIEM01] }
+    schedule: *office
+
+  # --- Red Team -------------------------------------------------------------
+  - code: EMP-0028
+    first_name: Noah
+    last_name: Brennan
+    job_title: Red Team Lead
+    department: REDTEAM
+    manager: EMP-0022
+    location: RED_TEAM_OFFICE
+    persona: Runs authorised engagements and briefs new team members.
+    greeting: "Read the rules of engagement on the wall, then grab a workstation."
+    identity: { username: noah, mfa: true, groups: [GRP-ALL-STAFF, GRP-SECURITY, GRP-RED-TEAM], access: [APP-WATCHTOWER] }
+    schedule: *office
+  - code: EMP-0029
+    first_name: Zoe
+    last_name: Laurent
+    job_title: Penetration Tester
+    department: REDTEAM
+    manager: EMP-0028
+    location: RED_TEAM_OFFICE
+    persona: Web application specialist; collects stories about the customer portal.
+    greeting: "The portal's file upload has always looked interesting to me."
+    identity: { username: zoe, mfa: true, groups: [GRP-ALL-STAFF, GRP-SECURITY, GRP-RED-TEAM], access: [APP-PORTAL] }
+    schedule: *office
+
+service_accounts:
+  - { username: svc-backup, privileged: true, groups: [GRP-DOMAIN-ADMINS], access: [SRV-HQ-FS01, SRV-HQ-BACKUP01, CLOUD-S3-BACKUPS] }
+  - { username: svc-deploy, privileged: true, access: [APP-CODEVAULT, SRV-HQ-WEB01, SRV-HQ-APP01] }
+  - { username: svc-sql, access: [DB-FINANCE, DB-HR] }
+  - { username: svc-siem, access: [APP-WATCHTOWER, SRV-HQ-DC01] }
+  - { username: svc-legacy-scan, status: disabled, access: [SRV-HQ-FS01] }

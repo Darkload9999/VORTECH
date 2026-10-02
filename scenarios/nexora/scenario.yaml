@@ -1,0 +1,11 @@
+# NEXORA Industries: the default VORTECH world.
+# Entirely fictional organisation, people, systems and addresses.
+apiVersion: vortech/v1
+kind: Scenario
+slug: nexora
+name: NEXORA Industries
+version: 1.0.0
+description: >-
+  A mid-sized industrial technology company with a headquarters tower and a
+  branch office. Players join NEXORA's security organisation and work
+  authorised engagements against its real, isolated infrastructure.

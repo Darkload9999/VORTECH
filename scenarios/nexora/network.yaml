@@ -1,0 +1,17 @@
+# Network segments. Each network is imported as an asset of type "network";
+# hosts join a network with `network:` in assets.yaml (CONNECTED_TO edge).
+networks:
+  - { code: NET-CORP-SERVERS, name: Corporate Servers, cidr: 10.20.1.0/24, vlan: 100,
+      location: SERVER_ROOM, criticality: critical }
+  - { code: NET-DMZ, name: DMZ, cidr: 10.20.5.0/24, vlan: 5, location: SERVER_ROOM, criticality: critical,
+      description: Internet-facing services. }
+  - { code: NET-HQ-EXEC, name: Executive VLAN, cidr: 10.20.10.0/24, vlan: 10, criticality: high }
+  - { code: NET-HQ-HR, name: HR VLAN, cidr: 10.20.20.0/24, vlan: 20, criticality: high }
+  - { code: NET-HQ-FINANCE, name: Finance VLAN, cidr: 10.20.30.0/24, vlan: 30, criticality: high,
+      description: finance_vlan }
+  - { code: NET-HQ-ENG, name: Engineering VLAN, cidr: 10.20.40.0/24, vlan: 40 }
+  - { code: NET-HQ-IT, name: IT VLAN, cidr: 10.20.50.0/24, vlan: 50 }
+  - { code: NET-HQ-SECURITY, name: Security VLAN, cidr: 10.20.60.0/24, vlan: 60 }
+  - { code: NET-MGMT, name: Management Network, cidr: 10.20.99.0/24, vlan: 99, location: SERVER_ROOM,
+      criticality: critical, description: Out-of-band management for network gear and the jump host. }
+  - { code: NET-BRANCH, name: Branch Office LAN, cidr: 10.30.10.0/24, vlan: 10, location: BRANCH_OPEN_OFFICE }

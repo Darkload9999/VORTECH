@@ -1,0 +1,178 @@
+# NEXORA digital estate. Hosts join networks with `network:` (CONNECTED_TO),
+# applications run on servers via `hosted_on:` (HOSTED_ON) and declare
+# `depends_on:` (DEPENDS_ON). Ownership, identities and group memberships
+# come from employees.yaml. Extra digital-twin edges go in `relationships:`.
+# The servers WEB01, APP01, DB01, GIT01 and JUMP01 are replicated inside each
+# player's isolated cyber range.
+
+assets:
+  # --- Directory groups -----------------------------------------------------
+  - { code: GRP-ALL-STAFF, name: All Staff, type: identity_group, criticality: low }
+  - { code: GRP-EXECUTIVES, name: Executives, type: identity_group, criticality: high }
+  - { code: GRP-HR, name: HR, type: identity_group, criticality: high }
+  - { code: GRP-FINANCE, name: Finance, type: identity_group, criticality: high }
+  - { code: GRP-ENGINEERING, name: Engineering, type: identity_group }
+  - { code: GRP-IT-ADMINS, name: IT Admins, type: identity_group, criticality: high }
+  - { code: GRP-DOMAIN-ADMINS, name: Domain Admins, type: identity_group, criticality: critical,
+      description: Full control of the NEXORA directory. Membership should be tiny. }
+  - { code: GRP-SECURITY, name: Security, type: identity_group, criticality: high }
+  - { code: GRP-SOC-ANALYSTS, name: SOC Analysts, type: identity_group, criticality: high }
+  - { code: GRP-RED-TEAM, name: Red Team, type: identity_group, criticality: high }
+  - { code: GRP-VPN-USERS, name: VPN Users, type: identity_group }
+
+  # --- Network infrastructure -------------------------------------------------
+  - { code: NET-DEV-FW-HQ01, name: HQ Edge Firewall, type: firewall, hostname: fw-hq01, ip: 10.20.99.1,
+      network: NET-MGMT, location: SERVER_ROOM, department: IT, owner: EMP-0021, criticality: critical,
+      os: NexOS Firewall 9.2 }
+  - { code: NET-DEV-SW-CORE, name: HQ Core Switch, type: network_device, hostname: sw-hq-core, ip: 10.20.99.2,
+      network: NET-MGMT, location: SERVER_ROOM, department: IT, owner: EMP-0021, criticality: critical }
+  - { code: NET-DEV-VPN01, name: Remote Access VPN, type: network_device, hostname: vpn01, ip: 10.20.5.20,
+      network: NET-DMZ, location: SERVER_ROOM, department: IT, owner: EMP-0021, criticality: critical,
+      description: Remote-access VPN for staff; single-factor for legacy users. }
+  - { code: NET-DEV-FW-BR01, name: Branch Firewall, type: firewall, hostname: fw-br01, ip: 10.30.10.1,
+      network: NET-BRANCH, location: BRANCH_OPEN_OFFICE, department: IT, owner: EMP-0031, criticality: high }
+
+  # --- Servers ----------------------------------------------------------------
+  - { code: SRV-HQ-DC01, name: Domain Controller, type: server, hostname: dc01, ip: 10.20.1.10,
+      network: NET-CORP-SERVERS, location: SERVER_ROOM, department: IT, owner: EMP-0019,
+      os: NexServer 2019, criticality: critical }
+  - { code: SRV-HQ-WEB01, name: Web Server, type: server, hostname: web01, ip: 10.20.5.10,
+      network: NET-DMZ, location: SERVER_ROOM, department: ENG, owner: EMP-0013,
+      os: Linux (Debian 12), criticality: high, attributes: { range_workload: web01 } }
+  - { code: SRV-HQ-APP01, name: Application Server, type: server, hostname: app01, ip: 10.20.1.20,
+      network: NET-CORP-SERVERS, location: SERVER_ROOM, department: ENG, owner: EMP-0013,
+      os: Linux (Debian 12), criticality: high, attributes: { range_workload: app01 } }
+  - { code: SRV-HQ-DB01, name: Database Server, type: server, hostname: db01, ip: 10.20.1.30,
+      network: NET-CORP-SERVERS, location: SERVER_ROOM, department: IT, owner: EMP-0019,
+      os: Linux (Debian 12), criticality: critical, attributes: { range_workload: db01 } }
+  - { code: SRV-HQ-GIT01, name: Source Control Server, type: server, hostname: git01, ip: 10.20.1.40,
+      network: NET-CORP-SERVERS, location: SERVER_ROOM, department: ENG, owner: EMP-0013,
+      os: Linux (Debian 12), criticality: high, attributes: { range_workload: git01 } }
+  - { code: SRV-HQ-JUMP01, name: Jump Host, type: server, hostname: jump01, ip: 10.20.99.10,
+      network: NET-MGMT, location: SERVER_ROOM, department: IT, owner: EMP-0019,
+      os: Linux (Debian 12), criticality: critical, attributes: { range_workload: jump01 },
+      description: Bastion for administrative access to the management network. }
+  - { code: SRV-HQ-MAIL01, name: Mail Server, type: server, hostname: mail01, ip: 10.20.1.50,
+      network: NET-CORP-SERVERS, location: SERVER_ROOM, department: IT, owner: EMP-0019, criticality: high }
+  - { code: SRV-HQ-FS01, name: File Server, type: server, hostname: fs01, ip: 10.20.1.60,
+      network: NET-CORP-SERVERS, location: SERVER_ROOM, department: IT, owner: EMP-0019, criticality: high,
+      description: 'Department shares, including a world-readable "Public" share.' }
+  - { code: SRV-HQ-SIEM01, name: SIEM Server, type: server, hostname: siem01, ip: 10.20.1.70,
+      network: NET-CORP-SERVERS, location: SERVER_ROOM, department: SOC, owner: EMP-0024, criticality: high }
+  - { code: SRV-HQ-BACKUP01, name: Backup Server, type: storage, hostname: backup01, ip: 10.20.1.80,
+      network: NET-CORP-SERVERS, location: SERVER_ROOM, department: IT, owner: EMP-0019, criticality: critical }
+
+  # --- Applications and data ----------------------------------------------------
+  - { code: APP-PORTAL, name: NEXORA Customer Portal, type: application, hosted_on: SRV-HQ-WEB01,
+      depends_on: [APP-LEDGER], department: ENG, owner: EMP-0014, criticality: high,
+      description: Internet-facing customer portal with document upload. }
+  - { code: APP-LEDGER, name: Ledger (Finance ERP), type: application, hosted_on: SRV-HQ-APP01,
+      depends_on: [DB-FINANCE], department: FIN, owner: EMP-0012, criticality: critical }
+  - { code: APP-PEOPLEDESK, name: PeopleDesk (HRIS), type: application, hosted_on: SRV-HQ-APP01,
+      depends_on: [DB-HR], department: HR, owner: EMP-0005, criticality: critical }
+  - { code: APP-CODEVAULT, name: CodeVault (Git), type: application, hosted_on: SRV-HQ-GIT01,
+      department: ENG, owner: EMP-0013, criticality: high }
+  - { code: APP-MAIL, name: Corporate Mail, type: application, hosted_on: SRV-HQ-MAIL01,
+      department: IT, owner: EMP-0017, criticality: high }
+  - { code: APP-WATCHTOWER, name: WatchTower SIEM, type: application, hosted_on: SRV-HQ-SIEM01,
+      department: SOC, owner: EMP-0024, criticality: high }
+  - { code: DB-FINANCE, name: Finance Database, type: database, hosted_on: SRV-HQ-DB01,
+      department: FIN, owner: EMP-0012, criticality: critical }
+  - { code: DB-HR, name: HR Database, type: database, hosted_on: SRV-HQ-DB01,
+      department: HR, owner: EMP-0005, criticality: critical }
+  - { code: CLOUD-S3-BACKUPS, name: nexora-backups bucket, type: cloud_resource, department: IT,
+      owner: EMP-0013, criticality: critical,
+      description: Object storage holding nightly CodeVault and database backups. }
+
+  # --- Endpoints ----------------------------------------------------------------
+  - { code: HQ-EXEC-PC-01, name: CEO Laptop, type: laptop, hostname: EXEC-LT01, ip: 10.20.10.11,
+      network: NET-HQ-EXEC, location: EXEC_SUITE, department: EXEC, owner: EMP-0001 }
+  - { code: HQ-EXEC-PC-02, name: COO Laptop, type: laptop, hostname: EXEC-LT02, ip: 10.20.10.12,
+      network: NET-HQ-EXEC, location: EXEC_SUITE, department: EXEC, owner: EMP-0003 }
+  - { code: HQ-EXEC-PC-03, name: EA Workstation, type: workstation, hostname: EXEC-PC03, ip: 10.20.10.13,
+      network: NET-HQ-EXEC, location: EXEC_SUITE, department: EXEC, owner: EMP-0004 }
+  - { code: HQ-HR-PC-01, name: HR Director Workstation, type: workstation, hostname: HR-PC01, ip: 10.20.20.21,
+      network: NET-HQ-HR, location: HR_OFFICE, department: HR, owner: EMP-0005 }
+  - { code: HQ-HR-PC-02, name: HR Generalist Workstation, type: workstation, hostname: HR-PC02, ip: 10.20.20.22,
+      network: NET-HQ-HR, location: HR_OFFICE, department: HR, owner: EMP-0006 }
+  - { code: HQ-HR-PC-03, name: Recruiter Workstation, type: workstation, hostname: HR-PC03, ip: 10.20.20.23,
+      network: NET-HQ-HR, location: HR_OFFICE, department: HR, owner: EMP-0007 }
+  - { code: HQ-FIN-PC-01, name: CFO Workstation, type: workstation, hostname: FIN-PC01, ip: 10.20.30.41,
+      network: NET-HQ-FINANCE, location: FINANCE_DEPT, department: FIN, owner: EMP-0002, criticality: high }
+  - { code: HQ-FIN-PC-02, name: Finance Manager Workstation, type: workstation, hostname: FIN-PC02, ip: 10.20.30.42,
+      network: NET-HQ-FINANCE, location: FINANCE_DEPT, department: FIN, owner: EMP-0008 }
+  - { code: HQ-FIN-PC-03, name: Accounts Payable Workstation, type: workstation, hostname: FIN-PC03, ip: 10.20.30.43,
+      network: NET-HQ-FINANCE, location: FINANCE_DEPT, department: FIN, owner: EMP-0009 }
+  - { code: HQ-FIN-PC-04, name: Senior Accountant Workstation, type: workstation, hostname: FIN-PC04, ip: 10.20.30.44,
+      network: NET-HQ-FINANCE, location: FINANCE_DEPT, department: FIN, owner: EMP-0018,
+      os: NexOS Desktop 11 }
+  - { code: HQ-FIN-PC-05, name: Payroll Workstation, type: workstation, hostname: FIN-PC05, ip: 10.20.30.45,
+      network: NET-HQ-FINANCE, location: FINANCE_DEPT, department: FIN, owner: EMP-0010, criticality: high }
+  - { code: PRN-HQ-FIN-01, name: Finance Printer, type: printer, hostname: FIN-PRN01, ip: 10.20.30.250,
+      network: NET-HQ-FINANCE, location: FINANCE_DEPT, department: FIN, criticality: low }
+  - { code: HQ-ENG-PC-01, name: VP Engineering Laptop, type: laptop, hostname: ENG-LT01, ip: 10.20.40.51,
+      network: NET-HQ-ENG, location: ENGINEERING_BULLPEN, department: ENG, owner: EMP-0011 }
+  - { code: HQ-ENG-PC-02, name: Backend Workstation, type: workstation, hostname: ENG-PC02, ip: 10.20.40.52,
+      network: NET-HQ-ENG, location: ENGINEERING_BULLPEN, department: ENG, owner: EMP-0012 }
+  - { code: HQ-ENG-PC-03, name: DevOps Workstation, type: workstation, hostname: ENG-PC03, ip: 10.20.40.53,
+      network: NET-HQ-ENG, location: ENGINEERING_BULLPEN, department: ENG, owner: EMP-0013, criticality: high }
+  - { code: HQ-ENG-PC-04, name: Frontend Workstation, type: workstation, hostname: ENG-PC04, ip: 10.20.40.54,
+      network: NET-HQ-ENG, location: ENGINEERING_BULLPEN, department: ENG, owner: EMP-0014 }
+  - { code: HQ-ENG-PC-05, name: QA Workstation, type: workstation, hostname: ENG-PC05, ip: 10.20.40.55,
+      network: NET-HQ-ENG, location: ENGINEERING_BULLPEN, department: ENG, owner: EMP-0015 }
+  - { code: HQ-ENG-PC-06, name: Contractor Laptop, type: laptop, hostname: ENG-LT06, ip: 10.20.40.56,
+      network: NET-HQ-ENG, location: ENGINEERING_BULLPEN, department: ENG, owner: EMP-0016,
+      description: Contractor-owned device enrolled in the corporate network. }
+  - { code: HQ-IT-PC-01, name: IT Manager Workstation, type: workstation, hostname: IT-PC01, ip: 10.20.50.61,
+      network: NET-HQ-IT, location: IT_OFFICE, department: IT, owner: EMP-0017 }
+  - { code: HQ-IT-PC-02, name: Sysadmin Workstation, type: workstation, hostname: IT-PC02, ip: 10.20.50.62,
+      network: NET-HQ-IT, location: IT_OFFICE, department: IT, owner: EMP-0019, criticality: high }
+  - { code: HQ-IT-PC-03, name: Helpdesk Workstation, type: workstation, hostname: IT-PC03, ip: 10.20.50.63,
+      network: NET-HQ-IT, location: IT_OFFICE, department: IT, owner: EMP-0020 }
+  - { code: HQ-IT-PC-04, name: Network Engineer Workstation, type: workstation, hostname: IT-PC04, ip: 10.20.50.64,
+      network: NET-HQ-IT, location: IT_OFFICE, department: IT, owner: EMP-0021, criticality: high }
+  - { code: HQ-SEC-PC-01, name: CISO Laptop, type: laptop, hostname: SEC-LT01, ip: 10.20.60.71,
+      network: NET-HQ-SECURITY, location: SECURITY_OFFICE, department: SEC, owner: EMP-0022 }
+  - { code: HQ-SEC-PC-02, name: Architect Workstation, type: workstation, hostname: SEC-PC02, ip: 10.20.60.72,
+      network: NET-HQ-SECURITY, location: SECURITY_OFFICE, department: SEC, owner: EMP-0023 }
+  - { code: HQ-SOC-PC-01, name: SOC Manager Workstation, type: workstation, hostname: SOC-PC01, ip: 10.20.60.81,
+      network: NET-HQ-SECURITY, location: SOC_FLOOR, department: SOC, owner: EMP-0024 }
+  - { code: HQ-SOC-PC-02, name: SOC Analyst Workstation, type: workstation, hostname: SOC-PC02, ip: 10.20.60.82,
+      network: NET-HQ-SECURITY, location: SOC_FLOOR, department: SOC, owner: EMP-0025 }
+  - { code: HQ-SOC-PC-03, name: SOC Analyst Workstation, type: workstation, hostname: SOC-PC03, ip: 10.20.60.83,
+      network: NET-HQ-SECURITY, location: SOC_FLOOR, department: SOC, owner: EMP-0026 }
+  - { code: HQ-SOC-PC-04, name: Threat Hunting Workstation, type: workstation, hostname: SOC-PC04, ip: 10.20.60.84,
+      network: NET-HQ-SECURITY, location: SOC_FLOOR, department: SOC, owner: EMP-0027 }
+  - { code: HQ-RT-PC-01, name: Red Team Lead Workstation, type: workstation, hostname: RT-PC01, ip: 10.20.60.91,
+      network: NET-HQ-SECURITY, location: RED_TEAM_OFFICE, department: REDTEAM, owner: EMP-0028 }
+  - { code: HQ-RT-PC-02, name: Pentester Workstation, type: workstation, hostname: RT-PC02, ip: 10.20.60.92,
+      network: NET-HQ-SECURITY, location: RED_TEAM_OFFICE, department: REDTEAM, owner: EMP-0029 }
+  - { code: HQ-RT-PC-03, name: Red Team Engagement Workstation, type: workstation, hostname: RT-PC03, ip: 10.20.60.93,
+      network: NET-HQ-SECURITY, location: RED_TEAM_OFFICE, department: REDTEAM, criticality: high,
+      description: Shared workstation used to open the player's security-workstation in an engagement range.,
+      attributes: { range_workload: security-workstation } }
+  - { code: BR-FIN-PC-01, name: Branch Accountant Workstation, type: workstation, hostname: BR-PC01, ip: 10.30.10.21,
+      network: NET-BRANCH, location: BRANCH_OPEN_OFFICE, department: FIN, owner: EMP-0030 }
+  - { code: BR-IT-LT-01, name: Branch Spare Admin Laptop, type: laptop, hostname: BR-LT01, ip: 10.30.10.22,
+      network: NET-BRANCH, location: BRANCH_OPEN_OFFICE, department: IT, owner: EMP-0031,
+      description: Spare laptop kept in a drawer with cached admin credentials. }
+  - { code: IOT-HQ-BADGE-01, name: Lobby Badge Controller, type: iot_device, hostname: badge-hq01, ip: 10.20.99.30,
+      network: NET-MGMT, location: LOBBY_RECEPTION, department: IT, criticality: medium }
+
+relationships:
+  # Network paths beyond simple segment membership.
+  - { from: "asset:NET-DEV-VPN01", type: CONNECTED_TO, to: "asset:NET-CORP-SERVERS" }
+  - { from: "asset:NET-DEV-FW-BR01", type: CONNECTED_TO, to: "asset:NET-DEV-FW-HQ01" }
+  - { from: "asset:SRV-HQ-JUMP01", type: HAS_ACCESS_TO, to: "asset:NET-CORP-SERVERS" }
+  # Authentication and data flows.
+  - { from: "asset:APP-PORTAL", type: AUTHENTICATES_TO, to: "asset:SRV-HQ-DC01" }
+  - { from: "asset:APP-LEDGER", type: AUTHENTICATES_TO, to: "asset:SRV-HQ-DC01" }
+  - { from: "asset:SRV-HQ-BACKUP01", type: DEPENDS_ON, to: "asset:CLOUD-S3-BACKUPS" }
+  - { from: "asset:SRV-HQ-SIEM01", type: DEPENDS_ON, to: "asset:SRV-HQ-DC01" }
+  # Groups granting access.
+  - { from: "asset:GRP-FINANCE", type: HAS_ACCESS_TO, to: "asset:APP-LEDGER" }
+  - { from: "asset:GRP-HR", type: HAS_ACCESS_TO, to: "asset:APP-PEOPLEDESK" }
+  - { from: "asset:GRP-VPN-USERS", type: HAS_ACCESS_TO, to: "asset:NET-DEV-VPN01" }
+  - { from: "asset:GRP-DOMAIN-ADMINS", type: MANAGES, to: "asset:SRV-HQ-DC01" }
+  - { from: "asset:GRP-IT-ADMINS", type: HAS_ACCESS_TO, to: "asset:SRV-HQ-JUMP01" }
+  - { from: "asset:GRP-SOC-ANALYSTS", type: HAS_ACCESS_TO, to: "asset:APP-WATCHTOWER" }
