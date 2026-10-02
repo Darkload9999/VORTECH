@@ -27,6 +27,10 @@ defaults:
     working-directory: backend
 
 env:
+  # Always the newest patch release of the Go line in go.mod: go.mod states
+  # only the minimum (1.26.0), and building with an old patch release ships
+  # standard-library vulnerabilities that govulncheck (rightly) flags.
+  GO_VERSION: "1.26.x"
   # Integration tests skip the live-Keycloak end-to-end suite when empty;
   # everything else (including PostgreSQL integration tests) runs.
   TEST_KEYCLOAK_URL: ""
@@ -42,7 +46,8 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version-file: backend/go.mod
+          go-version: ${{ env.GO_VERSION }}
+          check-latest: true
           cache-dependency-path: backend/go.sum
       - name: go mod tidy is clean
         run: |
@@ -83,7 +88,8 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version-file: backend/go.mod
+          go-version: ${{ env.GO_VERSION }}
+          check-latest: true
           cache-dependency-path: backend/go.sum
       - name: Unit tests (race)
         run: make test
@@ -100,7 +106,8 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version-file: backend/go.mod
+          go-version: ${{ env.GO_VERSION }}
+          check-latest: true
           cache-dependency-path: backend/go.sum
       - name: govulncheck
         run: make vuln
