@@ -1,0 +1,226 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "VORTECH Platform API",
+    "version": "0.2.0",
+    "description": "Authoritative control plane for the VORTECH cybersecurity simulation platform. Access tokens are obtained from Keycloak with the Authorization Code + PKCE (S256) flow by the browser and sent as `Authorization: Bearer <token>`. The API never accepts passwords and never accepts tokens from query strings or cookies."
+  },
+  "servers": [{ "url": "/" }],
+  "tags": [
+    { "name": "system", "description": "Probes and API metadata" },
+    { "name": "profile", "description": "The authenticated caller" }
+  ],
+  "paths": {
+    "/api/v1/health": {
+      "get": {
+        "tags": ["system"],
+        "summary": "Liveness probe",
+        "description": "Succeeds whenever the process can serve requests. Never checks dependencies.",
+        "operationId": "getHealth",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Process is alive",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["data"],
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "required": ["status"],
+                      "properties": { "status": { "const": "ok" } }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/ready": {
+      "get": {
+        "tags": ["system"],
+        "summary": "Readiness probe",
+        "description": "Succeeds when PostgreSQL is reachable and Keycloak signing keys are loaded. Fails with SERVICE_DRAINING during shutdown.",
+        "operationId": "getReady",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Ready to receive traffic",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["data"],
+                  "properties": { "data": { "$ref": "#/components/schemas/ReadinessReport" } }
+                }
+              }
+            }
+          },
+          "503": { "$ref": "#/components/responses/NotReady" }
+        }
+      }
+    },
+    "/api/v1/openapi.json": {
+      "get": {
+        "tags": ["system"],
+        "summary": "This OpenAPI document",
+        "operationId": "getOpenAPI",
+        "security": [],
+        "responses": {
+          "200": { "description": "OpenAPI 3.1 document", "content": { "application/json": {} } }
+        }
+      }
+    },
+    "/api/v1/me": {
+      "get": {
+        "tags": ["profile"],
+        "summary": "The authenticated caller",
+        "description": "Returns the caller's platform account, roles, effective permissions and player profile. The first request of a new Keycloak account creates its internal user (and, for PLAYER, its player profile). Requires permission `profile:read:own`, held by every platform role.",
+        "operationId": "getMe",
+        "security": [{ "keycloak": [] }],
+        "x-required-permission": "profile:read:own",
+        "responses": {
+          "200": {
+            "description": "Caller profile",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["data"],
+                  "properties": { "data": { "$ref": "#/components/schemas/Me" } }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "keycloak": {
+        "type": "oauth2",
+        "description": "Keycloak realm `vortech`, public client `vortech-web`, PKCE S256 required. Access tokens carry audience `vortech-api` and live for 5 minutes; refresh with the refresh token (rotated on every use).",
+        "flows": {
+          "authorizationCode": {
+            "authorizationUrl": "/auth/realms/vortech/protocol/openid-connect/auth",
+            "tokenUrl": "/auth/realms/vortech/protocol/openid-connect/token",
+            "refreshUrl": "/auth/realms/vortech/protocol/openid-connect/token",
+            "scopes": { "openid": "OpenID Connect" }
+          }
+        }
+      }
+    },
+    "responses": {
+      "Unauthorized": {
+        "description": "Missing, malformed, invalid or expired access token. Codes: UNAUTHORIZED, INVALID_TOKEN, TOKEN_EXPIRED (refresh and retry).",
+        "headers": {
+          "WWW-Authenticate": { "schema": { "type": "string" }, "description": "RFC 6750 Bearer challenge" }
+        },
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorEnvelope" } } }
+      },
+      "Forbidden": {
+        "description": "Authenticated but not permitted. Codes: FORBIDDEN, ACCOUNT_SUSPENDED. Denials are audited.",
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorEnvelope" } } }
+      },
+      "NotReady": {
+        "description": "Codes: SERVICE_NOT_READY (details.checks lists each dependency), SERVICE_DRAINING.",
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorEnvelope" } } }
+      },
+      "InternalError": {
+        "description": "Code INTERNAL_ERROR. Details are logged server-side under the request_id, never returned.",
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorEnvelope" } } }
+      }
+    },
+    "schemas": {
+      "ErrorEnvelope": {
+        "type": "object",
+        "required": ["error"],
+        "properties": {
+          "error": {
+            "type": "object",
+            "required": ["code", "message"],
+            "properties": {
+              "code": { "type": "string", "examples": ["RANGE_CAPACITY_EXCEEDED"] },
+              "message": { "type": "string" },
+              "request_id": { "type": "string", "description": "Matches the X-Request-ID response header" },
+              "details": { "type": "object" }
+            }
+          }
+        }
+      },
+      "ReadinessReport": {
+        "type": "object",
+        "required": ["status", "checks"],
+        "properties": {
+          "status": { "const": "ready" },
+          "checks": {
+            "type": "object",
+            "additionalProperties": { "enum": ["up", "down"] },
+            "examples": [{ "postgres": "up", "keycloak": "up" }]
+          }
+        }
+      },
+      "Role": { "enum": ["PLAYER", "INSTRUCTOR", "SCENARIO_CREATOR", "ADMIN"] },
+      "Permission": {
+        "enum": [
+          "profile:read:own", "scenario:play", "range:use:own", "evidence:manage:own",
+          "student:read", "scenario:assign", "progress:review",
+          "scenario:create", "scenario:edit", "scenario:publish", "platform:administer"
+        ]
+      },
+      "Me": {
+        "type": "object",
+        "required": ["user", "roles", "permissions", "player", "session"],
+        "properties": {
+          "user": {
+            "type": "object",
+            "required": ["id", "username", "email", "email_verified", "full_name", "status", "created_at"],
+            "properties": {
+              "id": { "type": "string", "format": "uuid" },
+              "username": { "type": "string" },
+              "email": { "type": ["string", "null"], "format": "email" },
+              "email_verified": { "type": "boolean" },
+              "full_name": { "type": ["string", "null"] },
+              "status": { "enum": ["active", "suspended"] },
+              "created_at": { "type": "string", "format": "date-time" }
+            }
+          },
+          "roles": { "type": "array", "items": { "$ref": "#/components/schemas/Role" } },
+          "permissions": {
+            "type": "array",
+            "description": "For UI gating only; the server enforces permissions on every request.",
+            "items": { "$ref": "#/components/schemas/Permission" }
+          },
+          "player": {
+            "description": "Present while the caller holds the PLAYER role.",
+            "oneOf": [
+              { "type": "null" },
+              {
+                "type": "object",
+                "required": ["id", "display_name", "created_at"],
+                "properties": {
+                  "id": { "type": "string", "format": "uuid" },
+                  "display_name": { "type": "string" },
+                  "created_at": { "type": "string", "format": "date-time" }
+                }
+              }
+            ]
+          },
+          "session": {
+            "type": "object",
+            "required": ["expires_at"],
+            "properties": { "expires_at": { "type": "string", "format": "date-time" } }
+          }
+        }
+      }
+    }
+  }
+}
