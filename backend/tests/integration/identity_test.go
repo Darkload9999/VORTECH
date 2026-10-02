@@ -14,12 +14,12 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/vortech/backend/internal/audit"
-	"github.com/vortech/backend/internal/auth"
-	"github.com/vortech/backend/internal/auth/authtest"
-	"github.com/vortech/backend/internal/database/db"
-	"github.com/vortech/backend/internal/httpx"
-	"github.com/vortech/backend/internal/player"
+	"github.com/Darkload9999/VORTECH/backend/internal/audit"
+	"github.com/Darkload9999/VORTECH/backend/internal/auth"
+	"github.com/Darkload9999/VORTECH/backend/internal/auth/authtest"
+	"github.com/Darkload9999/VORTECH/backend/internal/database/db"
+	"github.com/Darkload9999/VORTECH/backend/internal/httpx"
+	"github.com/Darkload9999/VORTECH/backend/internal/player"
 )
 
 func claimsFor(subject, username string) *auth.Claims {

@@ -11,9 +11,9 @@ import (
 	"log/slog"
 	"strings"
 
-	"github.com/vortech/backend/internal/buildinfo"
-	"github.com/vortech/backend/internal/config"
-	"github.com/vortech/backend/internal/requestid"
+	"github.com/Darkload9999/VORTECH/backend/internal/buildinfo"
+	"github.com/Darkload9999/VORTECH/backend/internal/config"
+	"github.com/Darkload9999/VORTECH/backend/internal/requestid"
 )
 
 // Redacted replaces the value of any sensitive attribute.

@@ -4,7 +4,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/vortech/backend/internal/auth"
+	"github.com/Darkload9999/VORTECH/backend/internal/auth"
 )
 
 func TestParseRoles(t *testing.T) {

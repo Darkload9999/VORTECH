@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/vortech/backend/internal/config"
-	"github.com/vortech/backend/internal/requestid"
+	"github.com/Darkload9999/VORTECH/backend/internal/config"
+	"github.com/Darkload9999/VORTECH/backend/internal/requestid"
 )
 
 func newJSON(buf *bytes.Buffer, level slog.Level) *slog.Logger {

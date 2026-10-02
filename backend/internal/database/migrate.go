@@ -12,7 +12,7 @@ import (
 	"github.com/pressly/goose/v3"
 	"github.com/pressly/goose/v3/lock"
 
-	"github.com/vortech/backend/migrations"
+	"github.com/Darkload9999/VORTECH/backend/migrations"
 )
 
 // ErrNoMigrationToRollback is returned by Down when the schema is empty.

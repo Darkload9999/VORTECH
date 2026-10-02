@@ -29,9 +29,9 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
     go build -trimpath -buildvcs=false \
       -ldflags "-s -w \
-        -X github.com/vortech/backend/internal/buildinfo.Version=${VERSION} \
-        -X github.com/vortech/backend/internal/buildinfo.Commit=${COMMIT} \
-        -X github.com/vortech/backend/internal/buildinfo.BuildTime=${BUILD_TIME}" \
+        -X github.com/Darkload9999/VORTECH/backend/internal/buildinfo.Version=${VERSION} \
+        -X github.com/Darkload9999/VORTECH/backend/internal/buildinfo.Commit=${COMMIT} \
+        -X github.com/Darkload9999/VORTECH/backend/internal/buildinfo.BuildTime=${BUILD_TIME}" \
       -o /out/ ./cmd/api ./cmd/worker ./cmd/migrate
 
 FROM gcr.io/distroless/static-debian13:nonroot

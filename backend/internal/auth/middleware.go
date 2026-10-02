@@ -10,8 +10,8 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/vortech/backend/internal/audit"
-	"github.com/vortech/backend/internal/httpx"
+	"github.com/Darkload9999/VORTECH/backend/internal/audit"
+	"github.com/Darkload9999/VORTECH/backend/internal/httpx"
 )
 
 // Error codes returned by the authentication layer.

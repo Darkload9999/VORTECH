@@ -16,13 +16,13 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/vortech/backend/internal/buildinfo"
-	"github.com/vortech/backend/internal/config"
-	"github.com/vortech/backend/internal/database"
-	"github.com/vortech/backend/internal/health"
-	"github.com/vortech/backend/internal/httpx"
-	"github.com/vortech/backend/internal/logging"
-	"github.com/vortech/backend/internal/server"
+	"github.com/Darkload9999/VORTECH/backend/internal/buildinfo"
+	"github.com/Darkload9999/VORTECH/backend/internal/config"
+	"github.com/Darkload9999/VORTECH/backend/internal/database"
+	"github.com/Darkload9999/VORTECH/backend/internal/health"
+	"github.com/Darkload9999/VORTECH/backend/internal/httpx"
+	"github.com/Darkload9999/VORTECH/backend/internal/logging"
+	"github.com/Darkload9999/VORTECH/backend/internal/server"
 )
 
 const (

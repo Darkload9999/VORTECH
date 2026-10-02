@@ -12,9 +12,9 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/vortech/backend/internal/database/db"
-	"github.com/vortech/backend/internal/httpx"
-	"github.com/vortech/backend/internal/requestid"
+	"github.com/Darkload9999/VORTECH/backend/internal/database/db"
+	"github.com/Darkload9999/VORTECH/backend/internal/httpx"
+	"github.com/Darkload9999/VORTECH/backend/internal/requestid"
 )
 
 // ActorType identifies who performed an action.

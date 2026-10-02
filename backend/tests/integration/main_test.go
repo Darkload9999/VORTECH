@@ -23,8 +23,8 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/vortech/backend/internal/config"
-	"github.com/vortech/backend/internal/database"
+	"github.com/Darkload9999/VORTECH/backend/internal/config"
+	"github.com/Darkload9999/VORTECH/backend/internal/database"
 )
 
 // testDBURL is the connection string of the disposable database.

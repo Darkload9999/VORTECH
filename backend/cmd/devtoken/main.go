@@ -16,7 +16,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/vortech/backend/internal/devauth"
+	"github.com/Darkload9999/VORTECH/backend/internal/devauth"
 )
 
 func main() {

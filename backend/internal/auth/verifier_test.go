@@ -19,8 +19,8 @@ import (
 
 	jose "github.com/go-jose/go-jose/v4"
 
-	"github.com/vortech/backend/internal/auth"
-	"github.com/vortech/backend/internal/auth/authtest"
+	"github.com/Darkload9999/VORTECH/backend/internal/auth"
+	"github.com/Darkload9999/VORTECH/backend/internal/auth/authtest"
 )
 
 func discard() *slog.Logger { return slog.New(slog.DiscardHandler) }
