@@ -9,7 +9,42 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
+
+type Asset struct {
+	ID              uuid.UUID
+	CompanyID       uuid.UUID
+	AssetCode       string
+	Name            string
+	AssetType       string
+	Hostname        *string
+	IPAddress       *netip.Addr
+	NetworkCIDR     *netip.Prefix
+	OperatingSystem *string
+	Criticality     string
+	Status          string
+	DepartmentID    *uuid.UUID
+	OwnerEmployeeID *uuid.UUID
+	LocationID      *uuid.UUID
+	Description     string
+	Attributes      []byte
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
+}
+
+type AssetRelationship struct {
+	ID               uuid.UUID
+	CompanyID        uuid.UUID
+	RelationshipType string
+	SourceEmployeeID *uuid.UUID
+	SourceIdentityID *uuid.UUID
+	SourceAssetID    *uuid.UUID
+	TargetEmployeeID *uuid.UUID
+	TargetIdentityID *uuid.UUID
+	TargetAssetID    *uuid.UUID
+	CreatedAt        time.Time
+}
 
 type AuditLog struct {
 	ID           uuid.UUID
@@ -25,10 +60,111 @@ type AuditLog struct {
 	Metadata     []byte
 }
 
+type Company struct {
+	ID           uuid.UUID
+	ScenarioID   uuid.UUID
+	Code         string
+	Name         string
+	LegalName    string
+	Industry     string
+	Description  string
+	Headquarters string
+	FoundedYear  *int32
+	EmailDomain  string
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
+}
+
+type Department struct {
+	ID             uuid.UUID
+	CompanyID      uuid.UUID
+	Code           string
+	Name           string
+	Description    string
+	ParentID       *uuid.UUID
+	SortOrder      int32
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
+	HeadEmployeeID *uuid.UUID
+}
+
+type Employee struct {
+	ID             uuid.UUID
+	CompanyID      uuid.UUID
+	EmployeeCode   string
+	FirstName      string
+	LastName       string
+	DisplayName    string
+	JobTitle       string
+	DepartmentID   uuid.UUID
+	ManagerID      *uuid.UUID
+	HomeLocationID *uuid.UUID
+	EmploymentType string
+	Status         string
+	IsNpc          bool
+	Persona        string
+	Greeting       string
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
+}
+
+type EmployeeSchedule struct {
+	ID         uuid.UUID
+	EmployeeID uuid.UUID
+	Weekday    int32
+	StartsAt   pgtype.Time
+	EndsAt     pgtype.Time
+	LocationID *uuid.UUID
+	Activity   string
+}
+
+type EnterpriseIdentity struct {
+	ID           uuid.UUID
+	CompanyID    uuid.UUID
+	EmployeeID   *uuid.UUID
+	Username     string
+	Email        string
+	IdentityType string
+	Status       string
+	MfaEnabled   bool
+	Privileged   bool
+	ExpiresAt    *time.Time
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
+}
+
+type Location struct {
+	ID           uuid.UUID
+	CompanyID    uuid.UUID
+	ZoneID       uuid.UUID
+	Code         string
+	Name         string
+	Kind         string
+	DepartmentID *uuid.UUID
+	Description  string
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
+}
+
 type Player struct {
 	ID          uuid.UUID
 	UserID      uuid.UUID
 	DisplayName string
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+}
+
+type Scenario struct {
+	ID          uuid.UUID
+	Slug        string
+	Name        string
+	Version     string
+	Description string
+	Status      string
+	IsActive    bool
+	ContentHash string
+	ImportedAt  time.Time
+	PublishedAt *time.Time
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
 }
@@ -44,4 +180,36 @@ type User struct {
 	LastSeenAt      time.Time
 	CreatedAt       time.Time
 	UpdatedAt       time.Time
+}
+
+type WorldObject struct {
+	ID            uuid.UUID
+	CompanyID     uuid.UUID
+	LocationID    uuid.UUID
+	ObjectKey     string
+	Name          string
+	Kind          string
+	AssetID       *uuid.UUID
+	LeadsToZoneID *uuid.UUID
+	Interactions  []string
+	Description   string
+	Content       string
+	Attributes    []byte
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
+}
+
+type WorldZone struct {
+	ID                 uuid.UUID
+	CompanyID          uuid.UUID
+	Code               string
+	Name               string
+	Kind               string
+	ParentID           *uuid.UUID
+	Description        string
+	UnlockedByDefault  bool
+	RequiredCareerRank int32
+	SortOrder          int32
+	CreatedAt          time.Time
+	UpdatedAt          time.Time
 }

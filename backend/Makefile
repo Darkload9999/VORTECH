@@ -106,8 +106,8 @@ sqlc-check: ## Fail if generated sqlc code is stale
 
 ##@ Build & run
 .PHONY: build
-build: ## Build api, worker and migrate into ./bin
-	CGO_ENABLED=0 go build -trimpath -ldflags "$(GO_LDFLAGS)" -o $(BIN_DIR)/ ./cmd/api ./cmd/worker ./cmd/migrate
+build: ## Build api, worker, migrate and scenario into ./bin
+	CGO_ENABLED=0 go build -trimpath -ldflags "$(GO_LDFLAGS)" -o $(BIN_DIR)/ ./cmd/api ./cmd/worker ./cmd/migrate ./cmd/scenario
 
 .PHONY: run-api
 run-api: ## Run the API on the host (uses .env)
@@ -139,6 +139,21 @@ keycloak-logs: ## Follow Keycloak logs
 .PHONY: dev-token
 dev-token: ## Print an access token via PKCE login: make dev-token AS=player1
 	@go run ./cmd/devtoken -user $(or $(AS),player1)
+
+##@ Scenarios
+SCENARIO ?= ../scenarios/nexora
+
+.PHONY: scenario-validate
+scenario-validate: ## Validate a scenario directory (SCENARIO=../scenarios/nexora)
+	go run ./cmd/scenario validate $(SCENARIO)
+
+.PHONY: seed
+seed: ## Import and activate the NEXORA world into the local database
+	go run ./cmd/scenario import -activate $(SCENARIO)
+
+.PHONY: scenario-schema
+scenario-schema: ## Print the scenario JSON Schema (for editor integration)
+	@go run ./cmd/scenario schema
 
 ##@ Database
 .PHONY: db-up

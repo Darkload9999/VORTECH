@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1.7
 #
 # One image carries all backend binaries; the entrypoint selects the role:
-#   api (default) | /app/worker | /app/migrate up
+#   api (default) | /app/worker | /app/migrate up | /app/scenario import <dir>
 #
 # Runtime image: distroless static, no shell, no package manager, runs as
 # the unprivileged nonroot user (65532) and works with a read-only root FS.
@@ -32,7 +32,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
         -X github.com/Darkload9999/VORTECH/backend/internal/buildinfo.Version=${VERSION} \
         -X github.com/Darkload9999/VORTECH/backend/internal/buildinfo.Commit=${COMMIT} \
         -X github.com/Darkload9999/VORTECH/backend/internal/buildinfo.BuildTime=${BUILD_TIME}" \
-      -o /out/ ./cmd/api ./cmd/worker ./cmd/migrate
+      -o /out/ ./cmd/api ./cmd/worker ./cmd/migrate ./cmd/scenario
 
 FROM gcr.io/distroless/static-debian13:nonroot
 

@@ -1,0 +1,35 @@
+departments:
+  - code: EXEC
+    name: Executive
+    description: Company leadership and executive support.
+    head: EMP-0001
+  - code: HR
+    name: Human Resources
+    description: Hiring, onboarding, offboarding and employee records.
+    head: EMP-0005
+  - code: FIN
+    name: Finance
+    description: Accounting, payroll, payables and financial reporting.
+    head: EMP-0002
+  - code: ENG
+    name: Engineering
+    description: Builds the NEXORA platform, its web portal and internal tools.
+    head: EMP-0011
+  - code: IT
+    name: IT
+    description: Endpoints, identity, servers, networking and helpdesk.
+    head: EMP-0017
+  - code: SEC
+    name: Cybersecurity
+    description: Security leadership, architecture and governance.
+    head: EMP-0022
+  - code: SOC
+    name: Security Operations Center
+    description: Monitoring, detection, triage and incident response.
+    parent: SEC
+    head: EMP-0024
+  - code: REDTEAM
+    name: Red Team
+    description: Authorised adversary emulation and penetration testing.
+    parent: SEC
+    head: EMP-0028
