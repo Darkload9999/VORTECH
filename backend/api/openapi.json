@@ -2,18 +2,42 @@
   "openapi": "3.1.0",
   "info": {
     "title": "VORTECH Platform API",
-    "version": "0.2.0",
+    "version": "0.3.0",
     "description": "Authoritative control plane for the VORTECH cybersecurity simulation platform. Access tokens are obtained from Keycloak with the Authorization Code + PKCE (S256) flow by the browser and sent as `Authorization: Bearer <token>`. The API never accepts passwords and never accepts tokens from query strings or cookies."
   },
-  "servers": [{ "url": "/" }],
+  "servers": [
+    {
+      "url": "/"
+    }
+  ],
   "tags": [
-    { "name": "system", "description": "Probes and API metadata" },
-    { "name": "profile", "description": "The authenticated caller" }
+    {
+      "name": "system",
+      "description": "Probes and API metadata"
+    },
+    {
+      "name": "profile",
+      "description": "The authenticated caller"
+    },
+    {
+      "name": "company",
+      "description": "The active fictional enterprise (scenario-defined)"
+    },
+    {
+      "name": "world",
+      "description": "Authoritative world model and the physical → digital mapping"
+    },
+    {
+      "name": "assets",
+      "description": "Digital assets and the digital-twin graph"
+    }
   ],
   "paths": {
     "/api/v1/health": {
       "get": {
-        "tags": ["system"],
+        "tags": [
+          "system"
+        ],
         "summary": "Liveness probe",
         "description": "Succeeds whenever the process can serve requests. Never checks dependencies.",
         "operationId": "getHealth",
@@ -25,12 +49,20 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "required": ["data"],
+                  "required": [
+                    "data"
+                  ],
                   "properties": {
                     "data": {
                       "type": "object",
-                      "required": ["status"],
-                      "properties": { "status": { "const": "ok" } }
+                      "required": [
+                        "status"
+                      ],
+                      "properties": {
+                        "status": {
+                          "const": "ok"
+                        }
+                      }
                     }
                   }
                 }
@@ -42,7 +74,9 @@
     },
     "/api/v1/ready": {
       "get": {
-        "tags": ["system"],
+        "tags": [
+          "system"
+        ],
         "summary": "Readiness probe",
         "description": "Succeeds when PostgreSQL is reachable and Keycloak signing keys are loaded. Fails with SERVICE_DRAINING during shutdown.",
         "operationId": "getReady",
@@ -54,34 +88,55 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "required": ["data"],
-                  "properties": { "data": { "$ref": "#/components/schemas/ReadinessReport" } }
+                  "required": [
+                    "data"
+                  ],
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/ReadinessReport"
+                    }
+                  }
                 }
               }
             }
           },
-          "503": { "$ref": "#/components/responses/NotReady" }
+          "503": {
+            "$ref": "#/components/responses/NotReady"
+          }
         }
       }
     },
     "/api/v1/openapi.json": {
       "get": {
-        "tags": ["system"],
+        "tags": [
+          "system"
+        ],
         "summary": "This OpenAPI document",
         "operationId": "getOpenAPI",
         "security": [],
         "responses": {
-          "200": { "description": "OpenAPI 3.1 document", "content": { "application/json": {} } }
+          "200": {
+            "description": "OpenAPI 3.1 document",
+            "content": {
+              "application/json": {}
+            }
+          }
         }
       }
     },
     "/api/v1/me": {
       "get": {
-        "tags": ["profile"],
+        "tags": [
+          "profile"
+        ],
         "summary": "The authenticated caller",
         "description": "Returns the caller's platform account, roles, effective permissions and player profile. The first request of a new Keycloak account creates its internal user (and, for PLAYER, its player profile). Requires permission `profile:read:own`, held by every platform role.",
         "operationId": "getMe",
-        "security": [{ "keycloak": [] }],
+        "security": [
+          {
+            "keycloak": []
+          }
+        ],
         "x-required-permission": "profile:read:own",
         "responses": {
           "200": {
@@ -90,16 +145,700 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "required": ["data"],
-                  "properties": { "data": { "$ref": "#/components/schemas/Me" } }
+                  "required": [
+                    "data"
+                  ],
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/Me"
+                    }
+                  }
                 }
               }
             }
           },
-          "401": { "$ref": "#/components/responses/Unauthorized" },
-          "403": { "$ref": "#/components/responses/Forbidden" },
-          "500": { "$ref": "#/components/responses/InternalError" }
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
         }
+      }
+    },
+    "/api/v1/company": {
+      "get": {
+        "tags": [
+          "company"
+        ],
+        "summary": "The active company",
+        "operationId": "getCompany",
+        "security": [
+          {
+            "keycloak": []
+          }
+        ],
+        "x-required-permission": "world:read",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data"
+                  ],
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/Company"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "503": {
+            "$ref": "#/components/responses/WorldNotActive"
+          }
+        }
+      }
+    },
+    "/api/v1/company/departments": {
+      "get": {
+        "tags": [
+          "company"
+        ],
+        "summary": "Departments",
+        "operationId": "listDepartments",
+        "security": [
+          {
+            "keycloak": []
+          }
+        ],
+        "x-required-permission": "world:read",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Department"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "503": {
+            "$ref": "#/components/responses/WorldNotActive"
+          }
+        }
+      }
+    },
+    "/api/v1/employees": {
+      "get": {
+        "tags": [
+          "company"
+        ],
+        "summary": "Employee directory",
+        "operationId": "listEmployees",
+        "security": [
+          {
+            "keycloak": []
+          }
+        ],
+        "x-required-permission": "world:read",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "meta"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/EmployeeSummary"
+                      }
+                    },
+                    "meta": {
+                      "$ref": "#/components/schemas/PageMeta"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "503": {
+            "$ref": "#/components/responses/WorldNotActive"
+          }
+        },
+        "description": "Fictional employees, ordered by code. Keyset-paginated.",
+        "parameters": [
+          {
+            "name": "department",
+            "in": "query",
+            "required": false,
+            "description": "Department code, e.g. FIN",
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Z][A-Z0-9_-]{0,31}$"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "description": "Case-insensitive substring search (≤100 chars)",
+            "schema": {
+              "type": "string",
+              "maxLength": 100
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Page size (1–200, default 50)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Opaque cursor from meta.next_cursor",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/api/v1/employees/{id}": {
+      "get": {
+        "tags": [
+          "company"
+        ],
+        "summary": "Employee detail",
+        "operationId": "getEmployee",
+        "security": [
+          {
+            "keycloak": []
+          }
+        ],
+        "x-required-permission": "world:read",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data"
+                  ],
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/EmployeeDetail"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "503": {
+            "$ref": "#/components/responses/WorldNotActive"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        },
+        "description": "Includes fictional enterprise identities (never platform logins), weekly schedule, reports and owned assets.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Resource ID",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ]
+      }
+    },
+    "/api/v1/assets": {
+      "get": {
+        "tags": [
+          "assets"
+        ],
+        "summary": "Asset inventory",
+        "operationId": "listAssets",
+        "security": [
+          {
+            "keycloak": []
+          }
+        ],
+        "x-required-permission": "world:read",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "meta"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/AssetSummary"
+                      }
+                    },
+                    "meta": {
+                      "$ref": "#/components/schemas/PageMeta"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "503": {
+            "$ref": "#/components/responses/WorldNotActive"
+          }
+        },
+        "description": "Ordered by asset code. Keyset-paginated.",
+        "parameters": [
+          {
+            "name": "type",
+            "in": "query",
+            "required": false,
+            "description": "Asset type",
+            "schema": {
+              "$ref": "#/components/schemas/AssetType"
+            }
+          },
+          {
+            "name": "department",
+            "in": "query",
+            "required": false,
+            "description": "Department code, e.g. FIN",
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Z][A-Z0-9_-]{0,31}$"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "description": "Case-insensitive substring search (≤100 chars)",
+            "schema": {
+              "type": "string",
+              "maxLength": 100
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Page size (1–200, default 50)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Opaque cursor from meta.next_cursor",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/api/v1/assets/graph": {
+      "get": {
+        "tags": [
+          "assets"
+        ],
+        "summary": "Digital-twin graph (Cytoscape.js elements)",
+        "operationId": "getAssetGraph",
+        "security": [
+          {
+            "keycloak": []
+          }
+        ],
+        "x-required-permission": "world:read",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data"
+                  ],
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/Graph"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "503": {
+            "$ref": "#/components/responses/WorldNotActive"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        },
+        "description": "Without root, the whole company graph (bounded to 2000 nodes). With root, the subgraph within depth hops (edges traversed in both directions). Pass nodes and edges to cy.add().",
+        "parameters": [
+          {
+            "name": "root",
+            "in": "query",
+            "required": false,
+            "description": "Start node: employee:<uuid>, identity:<uuid> or asset:<uuid>",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "depth",
+            "in": "query",
+            "required": false,
+            "description": "Hops from root (1–4, default 2)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 4
+            }
+          }
+        ]
+      }
+    },
+    "/api/v1/assets/{id}": {
+      "get": {
+        "tags": [
+          "assets"
+        ],
+        "summary": "Asset detail",
+        "operationId": "getAsset",
+        "security": [
+          {
+            "keycloak": []
+          }
+        ],
+        "x-required-permission": "world:read",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data"
+                  ],
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/AssetDetail"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "503": {
+            "$ref": "#/components/responses/WorldNotActive"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Resource ID",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ]
+      }
+    },
+    "/api/v1/world": {
+      "get": {
+        "tags": [
+          "world"
+        ],
+        "summary": "World zones",
+        "operationId": "getWorld",
+        "security": [
+          {
+            "keycloak": []
+          }
+        ],
+        "x-required-permission": "world:read",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data"
+                  ],
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/World"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "503": {
+            "$ref": "#/components/responses/WorldNotActive"
+          }
+        },
+        "description": "Zone hierarchy as a flat list; build the tree from parent_id."
+      }
+    },
+    "/api/v1/world/zones/{id}": {
+      "get": {
+        "tags": [
+          "world"
+        ],
+        "summary": "Zone detail",
+        "operationId": "getZone",
+        "security": [
+          {
+            "keycloak": []
+          }
+        ],
+        "x-required-permission": "world:read",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data"
+                  ],
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/ZoneDetail"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "503": {
+            "$ref": "#/components/responses/WorldNotActive"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        },
+        "description": "Locations, interactive objects (with their assets) and NPCs present in the zone.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Resource ID",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ]
+      }
+    },
+    "/api/v1/world/objects/{key}": {
+      "get": {
+        "tags": [
+          "world"
+        ],
+        "summary": "Resolve a Three.js object",
+        "operationId": "getWorldObject",
+        "security": [
+          {
+            "keycloak": []
+          }
+        ],
+        "x-required-permission": "world:read",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data"
+                  ],
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/WorldObject"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "503": {
+            "$ref": "#/components/responses/WorldNotActive"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        },
+        "description": "Maps a Three.js object name (e.g. finance_pc_04) to its placement and digital asset. This is the Digital Twin entry point.",
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "description": "Three.js object name",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9_.-]{0,127}$"
+            }
+          }
+        ]
       }
     }
   },
@@ -113,7 +852,9 @@
             "authorizationUrl": "/auth/realms/vortech/protocol/openid-connect/auth",
             "tokenUrl": "/auth/realms/vortech/protocol/openid-connect/token",
             "refreshUrl": "/auth/realms/vortech/protocol/openid-connect/token",
-            "scopes": { "openid": "OpenID Connect" }
+            "scopes": {
+              "openid": "OpenID Connect"
+            }
           }
         }
       }
@@ -122,102 +863,1656 @@
       "Unauthorized": {
         "description": "Missing, malformed, invalid or expired access token. Codes: UNAUTHORIZED, INVALID_TOKEN, TOKEN_EXPIRED (refresh and retry).",
         "headers": {
-          "WWW-Authenticate": { "schema": { "type": "string" }, "description": "RFC 6750 Bearer challenge" }
+          "WWW-Authenticate": {
+            "schema": {
+              "type": "string"
+            },
+            "description": "RFC 6750 Bearer challenge"
+          }
         },
-        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorEnvelope" } } }
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorEnvelope"
+            }
+          }
+        }
       },
       "Forbidden": {
         "description": "Authenticated but not permitted. Codes: FORBIDDEN, ACCOUNT_SUSPENDED. Denials are audited.",
-        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorEnvelope" } } }
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorEnvelope"
+            }
+          }
+        }
       },
       "NotReady": {
         "description": "Codes: SERVICE_NOT_READY (details.checks lists each dependency), SERVICE_DRAINING.",
-        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorEnvelope" } } }
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorEnvelope"
+            }
+          }
+        }
       },
       "InternalError": {
         "description": "Code INTERNAL_ERROR. Details are logged server-side under the request_id, never returned.",
-        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorEnvelope" } } }
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorEnvelope"
+            }
+          }
+        }
+      },
+      "BadRequest": {
+        "description": "Invalid query parameter (INVALID_QUERY).",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorEnvelope"
+            }
+          }
+        }
+      },
+      "NotFound": {
+        "description": "NOT_FOUND.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorEnvelope"
+            }
+          }
+        }
+      },
+      "WorldNotActive": {
+        "description": "WORLD_NOT_ACTIVE: no scenario world is active (run `scenario import -activate`).",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorEnvelope"
+            }
+          }
+        }
       }
     },
     "schemas": {
       "ErrorEnvelope": {
         "type": "object",
-        "required": ["error"],
+        "required": [
+          "error"
+        ],
         "properties": {
           "error": {
             "type": "object",
-            "required": ["code", "message"],
+            "required": [
+              "code",
+              "message"
+            ],
             "properties": {
-              "code": { "type": "string", "examples": ["RANGE_CAPACITY_EXCEEDED"] },
-              "message": { "type": "string" },
-              "request_id": { "type": "string", "description": "Matches the X-Request-ID response header" },
-              "details": { "type": "object" }
+              "code": {
+                "type": "string",
+                "examples": [
+                  "RANGE_CAPACITY_EXCEEDED"
+                ]
+              },
+              "message": {
+                "type": "string"
+              },
+              "request_id": {
+                "type": "string",
+                "description": "Matches the X-Request-ID response header"
+              },
+              "details": {
+                "type": "object"
+              }
             }
           }
         }
       },
       "ReadinessReport": {
         "type": "object",
-        "required": ["status", "checks"],
+        "required": [
+          "status",
+          "checks"
+        ],
         "properties": {
-          "status": { "const": "ready" },
+          "status": {
+            "const": "ready"
+          },
           "checks": {
             "type": "object",
-            "additionalProperties": { "enum": ["up", "down"] },
-            "examples": [{ "postgres": "up", "keycloak": "up" }]
+            "additionalProperties": {
+              "enum": [
+                "up",
+                "down"
+              ]
+            },
+            "examples": [
+              {
+                "postgres": "up",
+                "keycloak": "up"
+              }
+            ]
           }
         }
       },
-      "Role": { "enum": ["PLAYER", "INSTRUCTOR", "SCENARIO_CREATOR", "ADMIN"] },
+      "Role": {
+        "enum": [
+          "PLAYER",
+          "INSTRUCTOR",
+          "SCENARIO_CREATOR",
+          "ADMIN"
+        ]
+      },
       "Permission": {
         "enum": [
-          "profile:read:own", "scenario:play", "range:use:own", "evidence:manage:own",
-          "student:read", "scenario:assign", "progress:review",
-          "scenario:create", "scenario:edit", "scenario:publish", "platform:administer"
+          "profile:read:own",
+          "world:read",
+          "scenario:play",
+          "range:use:own",
+          "evidence:manage:own",
+          "student:read",
+          "scenario:assign",
+          "progress:review",
+          "scenario:create",
+          "scenario:edit",
+          "scenario:publish",
+          "platform:administer"
         ]
       },
       "Me": {
         "type": "object",
-        "required": ["user", "roles", "permissions", "player", "session"],
+        "required": [
+          "user",
+          "roles",
+          "permissions",
+          "player",
+          "session"
+        ],
         "properties": {
           "user": {
             "type": "object",
-            "required": ["id", "username", "email", "email_verified", "full_name", "status", "created_at"],
+            "required": [
+              "id",
+              "username",
+              "email",
+              "email_verified",
+              "full_name",
+              "status",
+              "created_at"
+            ],
             "properties": {
-              "id": { "type": "string", "format": "uuid" },
-              "username": { "type": "string" },
-              "email": { "type": ["string", "null"], "format": "email" },
-              "email_verified": { "type": "boolean" },
-              "full_name": { "type": ["string", "null"] },
-              "status": { "enum": ["active", "suspended"] },
-              "created_at": { "type": "string", "format": "date-time" }
+              "id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "username": {
+                "type": "string"
+              },
+              "email": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "email"
+              },
+              "email_verified": {
+                "type": "boolean"
+              },
+              "full_name": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "status": {
+                "enum": [
+                  "active",
+                  "suspended"
+                ]
+              },
+              "created_at": {
+                "type": "string",
+                "format": "date-time"
+              }
             }
           },
-          "roles": { "type": "array", "items": { "$ref": "#/components/schemas/Role" } },
+          "roles": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Role"
+            }
+          },
           "permissions": {
             "type": "array",
             "description": "For UI gating only; the server enforces permissions on every request.",
-            "items": { "$ref": "#/components/schemas/Permission" }
+            "items": {
+              "$ref": "#/components/schemas/Permission"
+            }
           },
           "player": {
             "description": "Present while the caller holds the PLAYER role.",
             "oneOf": [
-              { "type": "null" },
+              {
+                "type": "null"
+              },
               {
                 "type": "object",
-                "required": ["id", "display_name", "created_at"],
+                "required": [
+                  "id",
+                  "display_name",
+                  "created_at"
+                ],
                 "properties": {
-                  "id": { "type": "string", "format": "uuid" },
-                  "display_name": { "type": "string" },
-                  "created_at": { "type": "string", "format": "date-time" }
+                  "id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "display_name": {
+                    "type": "string"
+                  },
+                  "created_at": {
+                    "type": "string",
+                    "format": "date-time"
+                  }
                 }
               }
             ]
           },
           "session": {
             "type": "object",
-            "required": ["expires_at"],
-            "properties": { "expires_at": { "type": "string", "format": "date-time" } }
+            "required": [
+              "expires_at"
+            ],
+            "properties": {
+              "expires_at": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          }
+        }
+      },
+      "PageMeta": {
+        "type": "object",
+        "required": [
+          "limit",
+          "next_cursor"
+        ],
+        "properties": {
+          "limit": {
+            "type": "integer"
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Pass as ?cursor= for the next page; null on the last page."
+          }
+        }
+      },
+      "AssetType": {
+        "enum": [
+          "workstation",
+          "laptop",
+          "server",
+          "virtual_machine",
+          "network_device",
+          "firewall",
+          "network",
+          "application",
+          "database",
+          "identity_group",
+          "cloud_resource",
+          "printer",
+          "iot_device",
+          "mobile_device",
+          "storage"
+        ]
+      },
+      "Ref": {
+        "type": "object",
+        "required": [
+          "id",
+          "code",
+          "name"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "code": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "Company": {
+        "type": "object",
+        "required": [
+          "id",
+          "code",
+          "name",
+          "legal_name",
+          "industry",
+          "description",
+          "headquarters",
+          "founded_year",
+          "email_domain",
+          "scenario",
+          "stats"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "code": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "legal_name": {
+            "type": "string"
+          },
+          "industry": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "headquarters": {
+            "type": "string"
+          },
+          "founded_year": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "email_domain": {
+            "type": "string",
+            "description": "Always a reserved TLD (.local, .test, …): the organisation is fictional."
+          },
+          "scenario": {
+            "type": "object",
+            "required": [
+              "slug",
+              "name",
+              "version"
+            ],
+            "properties": {
+              "slug": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "version": {
+                "type": "string"
+              }
+            }
+          },
+          "stats": {
+            "type": "object",
+            "required": [
+              "departments",
+              "employees",
+              "assets",
+              "zones"
+            ],
+            "properties": {
+              "departments": {
+                "type": "integer"
+              },
+              "employees": {
+                "type": "integer"
+              },
+              "assets": {
+                "type": "integer"
+              },
+              "zones": {
+                "type": "integer"
+              }
+            }
+          }
+        }
+      },
+      "Department": {
+        "type": "object",
+        "required": [
+          "id",
+          "code",
+          "name",
+          "description",
+          "parent_code",
+          "head",
+          "employee_count"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "code": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "parent_code": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "head": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "id",
+                  "name"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "job_title": {
+                    "type": "string"
+                  }
+                }
+              }
+            ]
+          },
+          "employee_count": {
+            "type": "integer"
+          }
+        }
+      },
+      "EmployeeSummary": {
+        "type": "object",
+        "required": [
+          "id",
+          "code",
+          "display_name",
+          "job_title",
+          "department",
+          "location_code",
+          "status",
+          "employment_type",
+          "is_npc"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "code": {
+            "type": "string"
+          },
+          "display_name": {
+            "type": "string"
+          },
+          "job_title": {
+            "type": "string"
+          },
+          "department": {
+            "type": "object",
+            "required": [
+              "code",
+              "name"
+            ],
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              }
+            }
+          },
+          "location_code": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "enum": [
+              "active",
+              "on_leave",
+              "terminated"
+            ]
+          },
+          "employment_type": {
+            "enum": [
+              "full_time",
+              "part_time",
+              "contractor"
+            ]
+          },
+          "is_npc": {
+            "type": "boolean"
+          }
+        }
+      },
+      "EmployeeDetail": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "code": {
+            "type": "string"
+          },
+          "first_name": {
+            "type": "string"
+          },
+          "last_name": {
+            "type": "string"
+          },
+          "display_name": {
+            "type": "string"
+          },
+          "job_title": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "employment_type": {
+            "type": "string"
+          },
+          "is_npc": {
+            "type": "boolean"
+          },
+          "greeting": {
+            "type": "string"
+          },
+          "department": {
+            "$ref": "#/components/schemas/Ref"
+          },
+          "manager": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Ref"
+              }
+            ]
+          },
+          "location": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "id",
+                  "code",
+                  "name"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "code": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "zone_id": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "format": "uuid"
+                  },
+                  "zone_code": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          "identities": {
+            "type": "array",
+            "description": "Fictional directory accounts (e.g. alex@nexora.local).",
+            "items": {
+              "type": "object",
+              "required": [
+                "id",
+                "username",
+                "email",
+                "type",
+                "status",
+                "mfa_enabled",
+                "privileged",
+                "groups"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "username": {
+                  "type": "string"
+                },
+                "email": {
+                  "type": "string"
+                },
+                "type": {
+                  "enum": [
+                    "user",
+                    "admin",
+                    "service",
+                    "contractor"
+                  ]
+                },
+                "status": {
+                  "enum": [
+                    "enabled",
+                    "disabled",
+                    "locked",
+                    "expired"
+                  ]
+                },
+                "mfa_enabled": {
+                  "type": "boolean"
+                },
+                "privileged": {
+                  "type": "boolean"
+                },
+                "expires_at": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "format": "date-time"
+                },
+                "groups": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          },
+          "schedule": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "weekday",
+                "from",
+                "to",
+                "activity"
+              ],
+              "properties": {
+                "weekday": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 7,
+                  "description": "ISO 8601, Monday = 1"
+                },
+                "from": {
+                  "type": "string",
+                  "pattern": "^\\d{2}:\\d{2}$"
+                },
+                "to": {
+                  "type": "string",
+                  "pattern": "^\\d{2}:\\d{2}$"
+                },
+                "activity": {
+                  "type": "string"
+                },
+                "location_code": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              }
+            }
+          },
+          "direct_reports": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Ref"
+            }
+          },
+          "assets": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "id",
+                "code",
+                "name",
+                "type"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "code": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "type": {
+                  "$ref": "#/components/schemas/AssetType"
+                },
+                "hostname": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "AssetSummary": {
+        "type": "object",
+        "required": [
+          "id",
+          "code",
+          "name",
+          "type",
+          "hostname",
+          "ip_address",
+          "network_cidr",
+          "criticality",
+          "status",
+          "department_code",
+          "owner_code",
+          "location_code"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "code": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "type": {
+            "$ref": "#/components/schemas/AssetType"
+          },
+          "hostname": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "ip_address": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "IPv4/IPv6 address"
+          },
+          "network_cidr": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Only for type=network"
+          },
+          "criticality": {
+            "enum": [
+              "low",
+              "medium",
+              "high",
+              "critical"
+            ]
+          },
+          "status": {
+            "enum": [
+              "active",
+              "maintenance",
+              "decommissioned"
+            ]
+          },
+          "department_code": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "owner_code": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "location_code": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "AssetDetail": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "code": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "type": {
+            "$ref": "#/components/schemas/AssetType"
+          },
+          "hostname": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "ip_address": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "IPv4/IPv6 address"
+          },
+          "network_cidr": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Only for type=network"
+          },
+          "criticality": {
+            "enum": [
+              "low",
+              "medium",
+              "high",
+              "critical"
+            ]
+          },
+          "status": {
+            "enum": [
+              "active",
+              "maintenance",
+              "decommissioned"
+            ]
+          },
+          "department_code": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "owner_code": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "location_code": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "operating_system": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "description": {
+            "type": "string"
+          },
+          "attributes": {
+            "type": "object"
+          },
+          "department": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Ref"
+              }
+            ]
+          },
+          "owner": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Ref"
+              }
+            ]
+          },
+          "location": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "object"
+              }
+            ]
+          },
+          "networks": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "id",
+                "code",
+                "name",
+                "cidr"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "code": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "cidr": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              }
+            }
+          },
+          "world_objects": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "key",
+                "name",
+                "kind"
+              ],
+              "properties": {
+                "key": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "kind": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "Graph": {
+        "type": "object",
+        "required": [
+          "nodes",
+          "edges",
+          "root",
+          "depth",
+          "truncated"
+        ],
+        "properties": {
+          "nodes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "data"
+              ],
+              "properties": {
+                "data": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "kind",
+                    "type",
+                    "label",
+                    "code"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "description": "<kind>:<uuid>"
+                    },
+                    "kind": {
+                      "enum": [
+                        "employee",
+                        "identity",
+                        "asset"
+                      ]
+                    },
+                    "type": {
+                      "type": "string"
+                    },
+                    "label": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "hostname": {
+                      "type": "string"
+                    },
+                    "criticality": {
+                      "type": "string"
+                    },
+                    "job_title": {
+                      "type": "string"
+                    },
+                    "department": {
+                      "type": "string"
+                    },
+                    "privileged": {
+                      "type": "boolean"
+                    },
+                    "status": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "edges": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "data"
+              ],
+              "properties": {
+                "data": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "source",
+                    "target",
+                    "label"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "source": {
+                      "type": "string"
+                    },
+                    "target": {
+                      "type": "string"
+                    },
+                    "label": {
+                      "enum": [
+                        "OWNS",
+                        "USES",
+                        "MEMBER_OF",
+                        "CONNECTED_TO",
+                        "HOSTED_ON",
+                        "DEPENDS_ON",
+                        "HAS_ACCESS_TO",
+                        "MANAGES",
+                        "LOCATED_IN",
+                        "AUTHENTICATES_TO",
+                        "HAS_IDENTITY"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "root": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "depth": {
+            "type": "integer"
+          },
+          "truncated": {
+            "type": "boolean"
+          }
+        }
+      },
+      "Zone": {
+        "type": "object",
+        "required": [
+          "id",
+          "code",
+          "name",
+          "kind",
+          "description",
+          "parent_id",
+          "parent_code",
+          "unlocked_by_default",
+          "required_career_rank"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "code": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "site",
+              "building",
+              "floor",
+              "area"
+            ]
+          },
+          "description": {
+            "type": "string"
+          },
+          "parent_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "parent_code": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "unlocked_by_default": {
+            "type": "boolean"
+          },
+          "required_career_rank": {
+            "type": "integer"
+          }
+        }
+      },
+      "World": {
+        "type": "object",
+        "required": [
+          "company",
+          "zones"
+        ],
+        "properties": {
+          "company": {
+            "type": "object",
+            "required": [
+              "id",
+              "code",
+              "name",
+              "scenario_slug",
+              "scenario_version"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "code": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "scenario_slug": {
+                "type": "string"
+              },
+              "scenario_version": {
+                "type": "string"
+              }
+            }
+          },
+          "zones": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Zone"
+            }
+          }
+        }
+      },
+      "ZoneDetail": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "code": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "site",
+              "building",
+              "floor",
+              "area"
+            ]
+          },
+          "description": {
+            "type": "string"
+          },
+          "parent_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "parent_code": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "unlocked_by_default": {
+            "type": "boolean"
+          },
+          "required_career_rank": {
+            "type": "integer"
+          },
+          "locations": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "id",
+                "code",
+                "name",
+                "kind"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "code": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "kind": {
+                  "type": "string"
+                },
+                "description": {
+                  "type": "string"
+                },
+                "department_code": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              }
+            }
+          },
+          "objects": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "id",
+                "key",
+                "name",
+                "kind",
+                "interactions",
+                "location_code",
+                "asset",
+                "leads_to"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "key": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "kind": {
+                  "type": "string"
+                },
+                "description": {
+                  "type": "string"
+                },
+                "interactions": {
+                  "type": "array",
+                  "items": {
+                    "enum": [
+                      "OPEN_DOOR",
+                      "CLOSE_DOOR",
+                      "USE_WORKSTATION",
+                      "INSPECT_OBJECT",
+                      "ACCESS_TERMINAL",
+                      "READ_DOCUMENT",
+                      "START_ENGAGEMENT"
+                    ]
+                  }
+                },
+                "location_code": {
+                  "type": "string"
+                },
+                "asset": {
+                  "oneOf": [
+                    {
+                      "type": "null"
+                    },
+                    {
+                      "type": "object"
+                    }
+                  ]
+                },
+                "leads_to": {
+                  "oneOf": [
+                    {
+                      "type": "null"
+                    },
+                    {
+                      "type": "object",
+                      "required": [
+                        "id",
+                        "code"
+                      ],
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "code": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "npcs": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "employee_id",
+                "code",
+                "display_name",
+                "job_title",
+                "greeting",
+                "location_code"
+              ],
+              "properties": {
+                "employee_id": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "code": {
+                  "type": "string"
+                },
+                "display_name": {
+                  "type": "string"
+                },
+                "job_title": {
+                  "type": "string"
+                },
+                "greeting": {
+                  "type": "string"
+                },
+                "location_code": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "WorldObject": {
+        "type": "object",
+        "required": [
+          "id",
+          "key",
+          "name",
+          "kind",
+          "interactions",
+          "location",
+          "zone",
+          "leads_to",
+          "asset"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "key": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "interactions": {
+            "type": "array",
+            "items": {
+              "enum": [
+                "OPEN_DOOR",
+                "CLOSE_DOOR",
+                "USE_WORKSTATION",
+                "INSPECT_OBJECT",
+                "ACCESS_TERMINAL",
+                "READ_DOCUMENT",
+                "START_ENGAGEMENT"
+              ]
+            }
+          },
+          "attributes": {
+            "type": "object"
+          },
+          "location": {
+            "type": "object",
+            "required": [
+              "id",
+              "code",
+              "name"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "code": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              }
+            }
+          },
+          "zone": {
+            "type": "object",
+            "required": [
+              "id",
+              "code"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "code": {
+                "type": "string"
+              }
+            }
+          },
+          "leads_to": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "id",
+                  "code"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "code": {
+                    "type": "string"
+                  }
+                }
+              }
+            ]
+          },
+          "asset": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "code": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "type": {
+                    "$ref": "#/components/schemas/AssetType"
+                  },
+                  "hostname": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "ip_address": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "operating_system": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "criticality": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "department_code": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "owner": {
+                    "oneOf": [
+                      {
+                        "type": "null"
+                      },
+                      {
+                        "type": "object",
+                        "required": [
+                          "code",
+                          "name"
+                        ],
+                        "properties": {
+                          "code": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  "networks": {
+                    "type": "array",
+                    "items": {
+                      "type": "object"
+                    }
+                  }
+                }
+              }
+            ]
           }
         }
       }

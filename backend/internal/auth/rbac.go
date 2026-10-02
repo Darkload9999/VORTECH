@@ -29,6 +29,7 @@ type Permission string
 // ownership check in the owning module.
 const (
 	PermProfileReadOwn     Permission = "profile:read:own"
+	PermWorldRead          Permission = "world:read"
 	PermScenarioPlay       Permission = "scenario:play"
 	PermRangeUseOwn        Permission = "range:use:own"
 	PermEvidenceManageOwn  Permission = "evidence:manage:own"
@@ -43,16 +44,16 @@ const (
 
 var rolePermissions = map[Role][]Permission{
 	RolePlayer: {
-		PermProfileReadOwn, PermScenarioPlay, PermRangeUseOwn, PermEvidenceManageOwn,
+		PermProfileReadOwn, PermWorldRead, PermScenarioPlay, PermRangeUseOwn, PermEvidenceManageOwn,
 	},
 	RoleInstructor: {
-		PermProfileReadOwn, PermStudentRead, PermScenarioAssign, PermProgressReview,
+		PermProfileReadOwn, PermWorldRead, PermStudentRead, PermScenarioAssign, PermProgressReview,
 	},
 	RoleScenarioCreator: {
-		PermProfileReadOwn, PermScenarioCreate, PermScenarioEdit, PermScenarioPublish,
+		PermProfileReadOwn, PermWorldRead, PermScenarioCreate, PermScenarioEdit, PermScenarioPublish,
 	},
 	RoleAdmin: {
-		PermProfileReadOwn, PermStudentRead, PermScenarioAssign, PermProgressReview,
+		PermProfileReadOwn, PermWorldRead, PermStudentRead, PermScenarioAssign, PermProgressReview,
 		PermScenarioCreate, PermScenarioEdit, PermScenarioPublish, PermPlatformAdminister,
 	},
 }

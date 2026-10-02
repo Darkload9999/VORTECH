@@ -66,6 +66,14 @@ func TestRolePermissionMatrix(t *testing.T) {
 	}
 }
 
+func TestEveryRoleCanReadTheWorld(t *testing.T) {
+	for _, r := range []string{"PLAYER", "INSTRUCTOR", "SCENARIO_CREATOR", "ADMIN"} {
+		if !auth.ParseRoles([]string{r}).Can(auth.PermWorldRead) {
+			t.Errorf("%s must have world:read", r)
+		}
+	}
+}
+
 func TestNoRolesNoPermissions(t *testing.T) {
 	rs := auth.ParseRoles([]string{"offline_access", "uma_authorization"})
 	if len(rs.Permissions()) != 0 || rs.Can(auth.PermProfileReadOwn) {

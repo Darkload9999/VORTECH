@@ -1,5 +1,6 @@
-// Package company owns the fictional enterprise (e.g. NEXORA Industries)
-// imported from scenario definitions.
+// Package company serves the active fictional enterprise (e.g. NEXORA
+// Industries) and its departments, as imported from scenario-as-code.
 //
-// Implemented in phase 3.
+// Directory resolves which company's world is currently active; every
+// world-facing module scopes its queries by that company.
 package company
