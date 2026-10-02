@@ -12,9 +12,10 @@ module boundaries, no microservices.
 | `api` | Public HTTP/WebSocket API (behind OpenResty) |
 | `worker` | Asynchronous jobs: range provisioning, reconciliation, cleanup |
 | `migrate` | Schema migrations (`up`, `down`, `status`, `version`, `create`) |
+| `scenario` | Validate / import scenario-as-code (`validate`, `import [-activate]`, `schema`) |
 | `devtoken` | **Dev only**: logs a seeded user in to the local Keycloak (real PKCE flow) and prints a token. Not included in the image. |
 
-`api`, `worker` and `migrate` are built into a single distroless image; the entrypoint selects the role.
+`api`, `worker`, `migrate` and `scenario` are built into a single distroless image; the entrypoint selects the role.
 
 ## Status
 
@@ -22,7 +23,8 @@ module boundaries, no microservices.
 |---|---|---|
 | 1 | Foundation: config, logging, PostgreSQL, migrations, sqlc, health, shutdown, Docker, compose | **done** |
 | 2 | Keycloak OIDC/PKCE, JWT validation, player mapping, RBAC, audit, `/me`, OpenAPI | **done** |
-| 3 | Company, departments, employees, assets, world zones, interactions, NEXORA seed, `/me/progress` | next |
+| 3a | Scenario-as-code (JSON Schema + importer), NEXORA seed, company/employee/asset/world APIs, digital-twin graph | **done** |
+| 3b | Interactions (server-validated), player progress, zone unlocks, career levels, `/me/progress` | next |
 | 4–9 | Real-time, ranges, terminal, telemetry, storage/observability, infrastructure | planned |
 
 ## Requirements
@@ -38,12 +40,14 @@ module boundaries, no microservices.
 cd backend
 make env              # create .env from .env.example
 make deps-up          # PostgreSQL 18 (127.0.0.1:55432) + Keycloak 26 (127.0.0.1:8180/auth)
+make seed             # validate + import + activate the NEXORA world
 make run-api          # applies migrations (development) and serves on HTTP_ADDR
 ```
 
 ```bash
 curl -s localhost:8080/api/v1/ready    # {"data":{"status":"ready","checks":{"keycloak":"up","postgres":"up"}}}
 curl -s -H "Authorization: Bearer $(make -s dev-token AS=player1)" localhost:8080/api/v1/me
+curl -s -H "Authorization: Bearer $(make -s dev-token AS=player1)" localhost:8080/api/v1/world/objects/finance_pc_04
 ```
 
 Run everything in containers instead (migrate job → api + worker):
@@ -74,6 +78,7 @@ Run `make help` for the full list. The important ones:
 | `make db-reset` | Destroy and recreate the local database |
 | `make deps-up` / `keycloak-reset` | Start dependencies / re-import the dev realm |
 | `make dev-token AS=admin1` | Print an access token for a seeded dev user |
+| `make seed` / `scenario-validate` | Import + activate NEXORA / validate a scenario (`SCENARIO=dir`) |
 
 ## Layout
 
@@ -82,6 +87,7 @@ cmd/
   api/          composition root for HTTP routes + main
   worker/       background worker main (job handlers arrive in phase 5)
   migrate/      schema migration CLI
+  scenario/     scenario-as-code validate/import CLI
 internal/
   config/       env configuration, validated at startup (fail fast)
   logging/      slog JSON/text, request-ID enrichment, secret redaction
@@ -95,8 +101,13 @@ internal/
   player/       Keycloak subject → user/player mapping, GET /me
   audit/        append-only audit records (in-transaction or best-effort)
   devauth/      dev-only scripted PKCE login (tests, devtoken)
+  scenario/     scenario loader: YAML → JSON Schema → cross-reference checks → importer
+  company/      active-world resolver, GET /company, /company/departments
+  employee/     employee directory (fictional identities, schedules)
+  asset/        asset inventory and the digital-twin graph (Cytoscape.js)
+  world/        zones, locations, objects, Three.js object → asset resolution
   buildinfo/    version metadata injected via -ldflags
-  company/ department/ employee/ asset/ world/ npc/
+  department/ npc/
   interaction/ engagement/ career/ event/ websocket/ terminal/
   cyberrange/ telemetry/ notification/ storage/ cache/
                 domain modules; each doc.go states its boundary and phase
@@ -194,6 +205,7 @@ the API scales out.
 | Permission | PLAYER | INSTRUCTOR | SCENARIO_CREATOR | ADMIN |
 |---|:-:|:-:|:-:|:-:|
 | `profile:read:own` | ✓ | ✓ | ✓ | ✓ |
+| `world:read` (company, employees, assets, world) | ✓ | ✓ | ✓ | ✓ |
 | `scenario:play`, `range:use:own`, `evidence:manage:own` | ✓ | | | |
 | `student:read`, `scenario:assign`, `progress:review` | | ✓ | | ✓ |
 | `scenario:create`, `scenario:edit`, `scenario:publish` | | | ✓ | ✓ |
@@ -272,6 +284,45 @@ Phase 9 delivers a production realm and deployment. It must:
 - enforce MFA for `ADMIN`, with an authentication flow that requires
   OTP/WebAuthn for that role. Optionally, the API can also require a step-up `acr`
   for administrative permissions.
+
+## Company, world and digital twin
+
+The world is defined in scenario-as-code under [`../scenarios`](../scenarios/README.md).
+`make seed` imports NEXORA: 8 departments, 31 NPC employees with fictional
+`@nexora.local` identities and weekly schedules, 78 assets including 10
+networks, 342 graph edges, and 9 zones with 14 locations and 26 interactive
+objects. All endpoints require `world:read` and are scoped to the **active**
+scenario's company. They return `503 WORLD_NOT_ACTIVE` if none is active.
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /api/v1/company` | Active company, scenario version, size |
+| `GET /api/v1/company/departments` | Departments with heads and headcount |
+| `GET /api/v1/employees?department=&q=&limit=&cursor=` | Directory (keyset-paginated) |
+| `GET /api/v1/employees/{id}` | Detail: fictional identities and groups, schedule, reports, owned assets |
+| `GET /api/v1/assets?type=&department=&q=&limit=&cursor=` | Asset inventory |
+| `GET /api/v1/assets/{id}` | Asset detail: networks, owner, location, Three.js objects |
+| `GET /api/v1/assets/graph?root=<kind>:<uuid>&depth=` | Digital-twin subgraph as Cytoscape.js `{nodes, edges}` |
+| `GET /api/v1/world` | Zone hierarchy |
+| `GET /api/v1/world/zones/{id}` | Locations, objects (with assets) and NPCs in a zone |
+| `GET /api/v1/world/objects/{key}` | Resolve a Three.js object name to its placement and asset |
+
+**Physical → digital mapping.** `GET /api/v1/world/objects/finance_pc_04` resolves to:
+- asset `HQ-FIN-PC-04`, hostname `FIN-PC04`, IP `10.20.30.44`;
+- department FIN, owner `EMP-0018` (Alex Morgan, identity `alex@nexora.local`);
+- network `NET-HQ-FINANCE` (`10.20.30.0/24`, the finance VLAN).
+
+**Pagination.** List endpoints return `meta: {limit, next_cursor}`. Pass
+`next_cursor` back as `?cursor=` until it is `null`. Searches with `q` match
+substrings case-insensitively, and LIKE wildcards in `q` are matched literally.
+
+**Graph.** Nodes are employees, fictional identities and assets, with ids
+`<kind>:<uuid>`. Edges cover the eleven relationship types (OWNS, MEMBER_OF,
+HOSTED_ON, …). Without `root` the whole company graph is returned, capped at
+2000 nodes. With `root`, traversal follows edges in both directions up to
+`depth` hops (at most 4).
+
+NPC `persona` text is an authoring note and is never returned by the API.
 
 ## Configuration
 

@@ -12,7 +12,7 @@ are no flags and no scoreboard.
 |---|---|
 | [`backend/`](backend/README.md) | Go modular monolith: API, worker, migrations |
 | `infrastructure/` | Terraform: K3s, platform, monitoring, range foundation *(phase 9)* |
-| `scenarios/` | Scenario-as-code definitions *(phase 3+)* |
+| [`scenarios/`](scenarios/README.md) | Scenario-as-code: the fictional NEXORA Industries world |
 
 The frontend (React, Three.js, xterm.js) is developed separately.
 
