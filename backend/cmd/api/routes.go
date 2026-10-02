@@ -5,11 +5,15 @@ import (
 	"net/http"
 
 	"github.com/Darkload9999/VORTECH/backend/api"
+	"github.com/Darkload9999/VORTECH/backend/internal/asset"
 	"github.com/Darkload9999/VORTECH/backend/internal/auth"
+	"github.com/Darkload9999/VORTECH/backend/internal/company"
 	"github.com/Darkload9999/VORTECH/backend/internal/config"
+	"github.com/Darkload9999/VORTECH/backend/internal/employee"
 	"github.com/Darkload9999/VORTECH/backend/internal/health"
 	"github.com/Darkload9999/VORTECH/backend/internal/httpx"
 	"github.com/Darkload9999/VORTECH/backend/internal/player"
+	"github.com/Darkload9999/VORTECH/backend/internal/world"
 )
 
 const (
@@ -19,11 +23,15 @@ const (
 
 // deps are the constructed modules the HTTP layer routes to.
 type deps struct {
-	cfg     *config.Config
-	log     *slog.Logger
-	health  *health.Service
-	authn   *auth.Authenticator
-	players *player.Handler
+	cfg       *config.Config
+	log       *slog.Logger
+	health    *health.Service
+	authn     *auth.Authenticator
+	players   *player.Handler
+	companies *company.Handler
+	employees *employee.Handler
+	assets    *asset.Handler
+	world     *world.Handler
 }
 
 // newHandler is the composition root for HTTP routes. Every route except the
@@ -36,7 +44,20 @@ func newHandler(d deps) http.Handler {
 	r.HandleFunc("GET "+pathReady, d.health.Ready)
 	r.HandleFunc("GET /api/v1/openapi.json", serveOpenAPI)
 
-	r.Handle("GET /api/v1/me", d.authn.Protect(auth.PermProfileReadOwn, http.HandlerFunc(d.players.Me)))
+	protect := func(perm auth.Permission, h http.HandlerFunc) http.Handler { return d.authn.Protect(perm, h) }
+
+	r.Handle("GET /api/v1/me", protect(auth.PermProfileReadOwn, d.players.Me))
+
+	r.Handle("GET /api/v1/company", protect(auth.PermWorldRead, d.companies.Get))
+	r.Handle("GET /api/v1/company/departments", protect(auth.PermWorldRead, d.companies.Departments))
+	r.Handle("GET /api/v1/employees", protect(auth.PermWorldRead, d.employees.List))
+	r.Handle("GET /api/v1/employees/{id}", protect(auth.PermWorldRead, d.employees.Get))
+	r.Handle("GET /api/v1/assets", protect(auth.PermWorldRead, d.assets.List))
+	r.Handle("GET /api/v1/assets/graph", protect(auth.PermWorldRead, d.assets.Graph))
+	r.Handle("GET /api/v1/assets/{id}", protect(auth.PermWorldRead, d.assets.Get))
+	r.Handle("GET /api/v1/world", protect(auth.PermWorldRead, d.world.World))
+	r.Handle("GET /api/v1/world/zones/{id}", protect(auth.PermWorldRead, d.world.Zone))
+	r.Handle("GET /api/v1/world/objects/{key}", protect(auth.PermWorldRead, d.world.Object))
 
 	return httpx.Chain(r,
 		httpx.RequestID,
