@@ -4,12 +4,12 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/vortech/backend/api"
-	"github.com/vortech/backend/internal/auth"
-	"github.com/vortech/backend/internal/config"
-	"github.com/vortech/backend/internal/health"
-	"github.com/vortech/backend/internal/httpx"
-	"github.com/vortech/backend/internal/player"
+	"github.com/Darkload9999/VORTECH/backend/api"
+	"github.com/Darkload9999/VORTECH/backend/internal/auth"
+	"github.com/Darkload9999/VORTECH/backend/internal/config"
+	"github.com/Darkload9999/VORTECH/backend/internal/health"
+	"github.com/Darkload9999/VORTECH/backend/internal/httpx"
+	"github.com/Darkload9999/VORTECH/backend/internal/player"
 )
 
 const (

@@ -14,7 +14,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/vortech/backend/internal/httpx"
+	"github.com/Darkload9999/VORTECH/backend/internal/httpx"
 )
 
 // Readiness error codes.

@@ -15,9 +15,9 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"golang.org/x/sync/singleflight"
 
-	"github.com/vortech/backend/internal/audit"
-	"github.com/vortech/backend/internal/auth"
-	"github.com/vortech/backend/internal/database/db"
+	"github.com/Darkload9999/VORTECH/backend/internal/audit"
+	"github.com/Darkload9999/VORTECH/backend/internal/auth"
+	"github.com/Darkload9999/VORTECH/backend/internal/database/db"
 )
 
 const (

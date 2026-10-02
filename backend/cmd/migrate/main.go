@@ -18,9 +18,9 @@ import (
 	"syscall"
 	"text/tabwriter"
 
-	"github.com/vortech/backend/internal/config"
-	"github.com/vortech/backend/internal/database"
-	"github.com/vortech/backend/internal/logging"
+	"github.com/Darkload9999/VORTECH/backend/internal/config"
+	"github.com/Darkload9999/VORTECH/backend/internal/database"
+	"github.com/Darkload9999/VORTECH/backend/internal/logging"
 )
 
 const usage = `usage: migrate <command>

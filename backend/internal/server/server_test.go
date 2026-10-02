@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/vortech/backend/internal/config"
+	"github.com/Darkload9999/VORTECH/backend/internal/config"
 )
 
 func testHTTPConfig() config.HTTPConfig {

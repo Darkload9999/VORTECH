@@ -9,9 +9,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
-	"github.com/vortech/backend/internal/auth"
-	"github.com/vortech/backend/internal/database/db"
-	"github.com/vortech/backend/internal/httpx"
+	"github.com/Darkload9999/VORTECH/backend/internal/auth"
+	"github.com/Darkload9999/VORTECH/backend/internal/database/db"
+	"github.com/Darkload9999/VORTECH/backend/internal/httpx"
 )
 
 // Handler serves player-facing profile endpoints.

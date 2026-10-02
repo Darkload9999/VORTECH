@@ -13,14 +13,14 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/vortech/backend/api"
-	"github.com/vortech/backend/internal/audit"
-	"github.com/vortech/backend/internal/auth"
-	"github.com/vortech/backend/internal/auth/authtest"
-	"github.com/vortech/backend/internal/config"
-	"github.com/vortech/backend/internal/health"
-	"github.com/vortech/backend/internal/player"
-	"github.com/vortech/backend/internal/requestid"
+	"github.com/Darkload9999/VORTECH/backend/api"
+	"github.com/Darkload9999/VORTECH/backend/internal/audit"
+	"github.com/Darkload9999/VORTECH/backend/internal/auth"
+	"github.com/Darkload9999/VORTECH/backend/internal/auth/authtest"
+	"github.com/Darkload9999/VORTECH/backend/internal/config"
+	"github.com/Darkload9999/VORTECH/backend/internal/health"
+	"github.com/Darkload9999/VORTECH/backend/internal/player"
+	"github.com/Darkload9999/VORTECH/backend/internal/requestid"
 )
 
 type stubResolver struct{}

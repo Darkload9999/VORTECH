@@ -8,7 +8,7 @@ SHELL := /usr/bin/env bash
 -include .env
 export
 
-MODULE        := github.com/vortech/backend
+MODULE        := github.com/Darkload9999/VORTECH/backend
 VERSION       ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 COMMIT        ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
 BUILD_TIME    ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
