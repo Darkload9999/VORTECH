@@ -9,11 +9,15 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/vortech/backend/internal/audit"
+	"github.com/vortech/backend/internal/auth"
 	"github.com/vortech/backend/internal/buildinfo"
 	"github.com/vortech/backend/internal/config"
 	"github.com/vortech/backend/internal/database"
+	"github.com/vortech/backend/internal/database/db"
 	"github.com/vortech/backend/internal/health"
 	"github.com/vortech/backend/internal/logging"
+	"github.com/vortech/backend/internal/player"
 	"github.com/vortech/backend/internal/server"
 )
 
@@ -44,8 +48,12 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	authCfg, err := config.LoadAuth(os.LookupEnv, cfg.Env)
+	if err != nil {
+		return err
+	}
 	log := logging.New(os.Stdout, cfg.Log, "api")
-	log.Info("starting", "commit", buildinfo.Commit, "build_time", buildinfo.BuildTime, "config", cfg)
+	log.Info("starting", "commit", buildinfo.Commit, "build_time", buildinfo.BuildTime, "config", cfg, "auth", authCfg)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -66,15 +74,41 @@ func run() error {
 		return err
 	}
 
+	// Signing keys load in the background: Keycloak being briefly
+	// unavailable delays readiness instead of failing startup.
+	keys := auth.NewKeySet(authCfg.JWKSURL(), log)
+	go keys.Run(ctx, authCfg.JWKSRefreshInterval)
+
+	queries := db.New(pool)
+	verifier := auth.NewVerifier(keys, auth.VerifierConfig{
+		Issuer:   authCfg.Issuer(),
+		Audience: authCfg.Audience,
+		ClientID: authCfg.ClientID,
+		Leeway:   authCfg.ClockSkew,
+	})
+	authn := auth.NewAuthenticator(verifier,
+		player.NewDirectory(pool, log, authCfg.IdentityCacheTTL),
+		audit.NewRecorder(queries, log),
+		log,
+	)
+
 	hs := health.New(log, cfg.Health.CheckTimeout, cfg.Health.CacheTTL,
 		health.Check{Name: "postgres", Fn: database.PingCheck(pool)},
+		health.Check{Name: "keycloak", Fn: keys.Ready},
 	)
 
 	ln, err := server.Listen(cfg.HTTP.Addr)
 	if err != nil {
 		return err
 	}
-	srv := server.New(cfg.HTTP.Addr, newHandler(cfg, log, hs), cfg.HTTP, log)
+	handler := newHandler(deps{
+		cfg:     cfg,
+		log:     log,
+		health:  hs,
+		authn:   authn,
+		players: player.NewHandler(queries, log),
+	})
+	srv := server.New(cfg.HTTP.Addr, handler, cfg.HTTP, log)
 
 	err = server.Run(ctx, log, srv, ln, server.ShutdownOptions{
 		OnDrain:    hs.SetDraining,
