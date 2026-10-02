@@ -11,7 +11,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/vortech/backend/internal/config"
+	"github.com/Darkload9999/VORTECH/backend/internal/config"
 )
 
 // New returns an *http.Server with timeouts from cfg. Timeouts protect the

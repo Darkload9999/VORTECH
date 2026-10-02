@@ -18,7 +18,7 @@ import (
 	jose "github.com/go-jose/go-jose/v4"
 	"github.com/go-jose/go-jose/v4/jwt"
 
-	"github.com/vortech/backend/internal/auth"
+	"github.com/Darkload9999/VORTECH/backend/internal/auth"
 )
 
 // Defaults matching the development realm.

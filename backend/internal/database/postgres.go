@@ -12,7 +12,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/vortech/backend/internal/config"
+	"github.com/Darkload9999/VORTECH/backend/internal/config"
 )
 
 // idleInTransactionTimeout terminates sessions that hold a transaction open

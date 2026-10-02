@@ -9,16 +9,16 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/vortech/backend/internal/audit"
-	"github.com/vortech/backend/internal/auth"
-	"github.com/vortech/backend/internal/buildinfo"
-	"github.com/vortech/backend/internal/config"
-	"github.com/vortech/backend/internal/database"
-	"github.com/vortech/backend/internal/database/db"
-	"github.com/vortech/backend/internal/health"
-	"github.com/vortech/backend/internal/logging"
-	"github.com/vortech/backend/internal/player"
-	"github.com/vortech/backend/internal/server"
+	"github.com/Darkload9999/VORTECH/backend/internal/audit"
+	"github.com/Darkload9999/VORTECH/backend/internal/auth"
+	"github.com/Darkload9999/VORTECH/backend/internal/buildinfo"
+	"github.com/Darkload9999/VORTECH/backend/internal/config"
+	"github.com/Darkload9999/VORTECH/backend/internal/database"
+	"github.com/Darkload9999/VORTECH/backend/internal/database/db"
+	"github.com/Darkload9999/VORTECH/backend/internal/health"
+	"github.com/Darkload9999/VORTECH/backend/internal/logging"
+	"github.com/Darkload9999/VORTECH/backend/internal/player"
+	"github.com/Darkload9999/VORTECH/backend/internal/server"
 )
 
 func main() {

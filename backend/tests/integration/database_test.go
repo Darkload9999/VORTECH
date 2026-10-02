@@ -14,9 +14,9 @@ import (
 
 	"github.com/jackc/pgx/v5/pgconn"
 
-	"github.com/vortech/backend/internal/database"
-	"github.com/vortech/backend/internal/database/db"
-	"github.com/vortech/backend/internal/health"
+	"github.com/Darkload9999/VORTECH/backend/internal/database"
+	"github.com/Darkload9999/VORTECH/backend/internal/database/db"
+	"github.com/Darkload9999/VORTECH/backend/internal/health"
 )
 
 // TestMigrationLifecycle must run first: it starts from an empty database.

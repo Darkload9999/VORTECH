@@ -13,9 +13,9 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/vortech/backend/internal/audit"
-	"github.com/vortech/backend/internal/auth"
-	"github.com/vortech/backend/internal/auth/authtest"
+	"github.com/Darkload9999/VORTECH/backend/internal/audit"
+	"github.com/Darkload9999/VORTECH/backend/internal/auth"
+	"github.com/Darkload9999/VORTECH/backend/internal/auth/authtest"
 )
 
 type fakeResolver struct {

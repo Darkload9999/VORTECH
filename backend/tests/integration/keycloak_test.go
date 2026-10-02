@@ -13,9 +13,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/vortech/backend/internal/auth"
-	"github.com/vortech/backend/internal/config"
-	"github.com/vortech/backend/internal/devauth"
+	"github.com/Darkload9999/VORTECH/backend/internal/auth"
+	"github.com/Darkload9999/VORTECH/backend/internal/config"
+	"github.com/Darkload9999/VORTECH/backend/internal/devauth"
 )
 
 // These tests exercise the real login path: Keycloak's Authorization Code +
