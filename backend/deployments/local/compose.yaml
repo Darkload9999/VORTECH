@@ -1,0 +1,104 @@
+# Local development stack. NOT for production.
+#
+#   make db-up                 PostgreSQL only (run the API on the host with `make run-api`)
+#   make compose-up            PostgreSQL + migrate job + API + worker in containers
+#
+# Every published port binds to 127.0.0.1 only. The default password below
+# is a development-only placeholder; override it via POSTGRES_PASSWORD in
+# backend/.env if you prefer.
+
+name: vortech
+
+x-backend: &backend
+  build:
+    context: ../..
+    args:
+      VERSION: dev-compose
+  image: vortech/backend:dev
+  read_only: true
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+  environment: &backend-env
+    APP_ENV: development
+    LOG_FORMAT: text
+    LOG_LEVEL: ${LOG_LEVEL:-info}
+    DATABASE_URL: postgres://vortech:${POSTGRES_PASSWORD:-vortech_dev_only}@postgres:5432/vortech?sslmode=disable
+    # The dedicated migrate service owns schema changes in this stack.
+    DATABASE_AUTO_MIGRATE: "false"
+  depends_on:
+    postgres:
+      condition: service_healthy
+    migrate:
+      condition: service_completed_successfully
+
+services:
+  postgres:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: vortech
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-vortech_dev_only}
+      POSTGRES_DB: vortech
+    ports:
+      - "127.0.0.1:${POSTGRES_HOST_PORT:-55432}:5432"
+    # PostgreSQL 18 images keep data under /var/lib/postgresql/18/docker;
+    # mount the parent so major upgrades can use pg_upgrade --link.
+    volumes:
+      - pgdata:/var/lib/postgresql
+    command:
+      - postgres
+      - -c
+      - log_min_duration_statement=250
+      - -c
+      - log_lock_waits=on
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vortech -d vortech"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    shm_size: 256mb
+
+  migrate:
+    <<: *backend
+    profiles: ["app"]
+    entrypoint: ["/app/migrate", "up"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  api:
+    <<: *backend
+    profiles: ["app"]
+    environment:
+      <<: *backend-env
+      HTTP_ADDR: ":8080"
+      HTTP_TRUSTED_PROXIES: ""
+    ports:
+      - "127.0.0.1:${API_HOST_PORT:-8080}:8080"
+    healthcheck:
+      test: ["CMD", "/app/api", "-healthcheck"]
+      interval: 5s
+      timeout: 4s
+      retries: 5
+    stop_grace_period: 30s
+    restart: unless-stopped
+
+  worker:
+    <<: *backend
+    profiles: ["app"]
+    entrypoint: ["/app/worker"]
+    environment:
+      <<: *backend-env
+      WORKER_HTTP_ADDR: ":8081"
+    healthcheck:
+      test: ["CMD", "/app/worker", "-healthcheck"]
+      interval: 5s
+      timeout: 4s
+      retries: 5
+    stop_grace_period: 30s
+    restart: unless-stopped
+
+volumes:
+  pgdata:
