@@ -36,6 +36,16 @@ TEST_DATABASE_URL ?= postgres://vortech:$(or $(POSTGRES_PASSWORD),vortech_dev_on
 # End-to-end auth tests run against the dev Keycloak; set empty to skip them.
 TEST_KEYCLOAK_URL ?= http://localhost:$(or $(KEYCLOAK_HOST_PORT),8180)/auth
 
+# Local K3s (k3d) for range provisioning. Kubeconfigs are gitignored.
+K3D := go run github.com/k3d-io/k3d/v5@v5.9.0
+K3S_IMAGE := rancher/k3s:v1.32.5-k3s1
+CLUSTER := vortech
+KUBE_DIR := deployments/local/k3s
+CLUSTER_KUBECTL := docker exec -i k3d-$(CLUSTER)-server-0 kubectl
+# Real-cluster tests run when these files exist (make cluster-up).
+TEST_KUBECONFIG ?= $(if $(wildcard $(KUBE_DIR)/kubeconfig),$(CURDIR)/$(KUBE_DIR)/kubeconfig)
+TEST_WORKER_KUBECONFIG ?= $(if $(wildcard $(KUBE_DIR)/kubeconfig-worker),$(CURDIR)/$(KUBE_DIR)/kubeconfig-worker)
+
 ##@ Help
 .PHONY: help
 help: ## Show this help
@@ -81,8 +91,9 @@ test: ## Run unit tests with the race detector
 	go test -race -count=1 ./...
 
 .PHONY: test-integration
-test-integration: ## Integration tests against compose PostgreSQL + Keycloak (make deps-up first)
+test-integration: ## Integration tests against compose PostgreSQL + Keycloak (+ K3s after make cluster-up)
 	TEST_DATABASE_URL='$(TEST_DATABASE_URL)' TEST_KEYCLOAK_URL='$(TEST_KEYCLOAK_URL)' \
+	TEST_KUBECONFIG='$(TEST_KUBECONFIG)' TEST_WORKER_KUBECONFIG='$(TEST_WORKER_KUBECONFIG)' \
 		go test -race -count=1 -tags integration ./tests/integration/...
 
 .PHONY: cover
@@ -116,6 +127,43 @@ run-api: ## Run the API on the host (uses .env)
 .PHONY: run-worker
 run-worker: ## Run the worker on the host (uses .env)
 	go run ./cmd/worker
+
+##@ Local K3s cluster (ranges)
+.PHONY: cluster-up
+cluster-up: ## Create the local k3d cluster, install worker RBAC + admission policy, write kubeconfigs
+	@$(K3D) cluster list $(CLUSTER) >/dev/null 2>&1 || $(K3D) cluster create $(CLUSTER) --image $(K3S_IMAGE) \
+		--servers 1 --agents 0 --api-port 127.0.0.1:6550 --k3s-arg "--disable=traefik@server:0" \
+		--kubeconfig-update-default=false --kubeconfig-switch-context=false --wait --timeout 180s
+	@mkdir -p $(KUBE_DIR)
+	@umask 077 && $(K3D) kubeconfig get $(CLUSTER) > $(KUBE_DIR)/kubeconfig
+	$(CLUSTER_KUBECTL) apply -f - < deployments/k3s/worker-rbac.yaml
+	$(CLUSTER_KUBECTL) apply -f - < deployments/k3s/worker-admission-policy.yaml
+	@$(MAKE) --no-print-directory cluster-worker-kubeconfig
+
+.PHONY: cluster-worker-kubeconfig
+cluster-worker-kubeconfig: ## Write a 24h kubeconfig for the worker's service account (what the worker should use)
+	@server=$$(awk '/server:/{print $$2; exit}' $(KUBE_DIR)/kubeconfig); \
+	ca=$$(awk '/certificate-authority-data:/{print $$2; exit}' $(KUBE_DIR)/kubeconfig); \
+	token=$$($(CLUSTER_KUBECTL) create token vortech-worker -n vortech --duration=24h); \
+	umask 077; printf '%s\n' 'apiVersion: v1' 'kind: Config' 'clusters:' '- name: $(CLUSTER)' '  cluster:' \
+		"    server: $$server" "    certificate-authority-data: $$ca" 'users:' '- name: vortech-worker' '  user:' \
+		"    token: $$token" 'contexts:' '- name: vortech-worker' '  context: {cluster: $(CLUSTER), user: vortech-worker}' \
+		'current-context: vortech-worker' > $(KUBE_DIR)/kubeconfig-worker
+	@# Same credentials for the compose worker, which reaches the API server
+	@# through k3d's docker network. Readable by the container's non-root
+	@# user: a dev-only, 24h token whose powers the admission policy confines.
+	@sed 's#server: .*#server: https://k3d-$(CLUSTER)-serverlb:6443#' $(KUBE_DIR)/kubeconfig-worker > $(KUBE_DIR)/kubeconfig-worker-docker
+	@chmod 644 $(KUBE_DIR)/kubeconfig-worker-docker
+	@echo "wrote $(KUBE_DIR)/kubeconfig-worker (make run-worker) and kubeconfig-worker-docker (make compose-up)"
+
+.PHONY: cluster-down
+cluster-down: ## Delete the local k3d cluster and its kubeconfigs
+	$(K3D) cluster delete $(CLUSTER)
+	rm -f $(KUBE_DIR)/kubeconfig $(KUBE_DIR)/kubeconfig-worker $(KUBE_DIR)/kubeconfig-worker-docker
+
+.PHONY: cluster-ranges
+cluster-ranges: ## List range namespaces in the local cluster
+	$(CLUSTER_KUBECTL) get namespaces -l vortech.io/managed-by=vortech -L vortech.io/range-id,vortech.io/quarantined
 
 ##@ Dependencies
 .PHONY: deps-up
@@ -200,7 +248,7 @@ docker-build: ## Build the versioned container image
 		-t $(IMAGE):$(VERSION) -t $(IMAGE):latest .
 
 .PHONY: compose-up
-compose-up: ## Run postgres + migrate + api + worker in containers
+compose-up: ## Run postgres + migrate + api + worker in containers (make cluster-up first)
 	$(COMPOSE) --profile app up -d --build --wait
 
 .PHONY: compose-down
