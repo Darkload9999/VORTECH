@@ -60,6 +60,17 @@ type AuditLog struct {
 	Metadata     []byte
 }
 
+type CareerLevel struct {
+	ID          uuid.UUID
+	Rank        int32
+	Code        string
+	Name        string
+	Description string
+	MinXp       int32
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+}
+
 type Company struct {
 	ID           uuid.UUID
 	ScenarioID   uuid.UUID
@@ -86,6 +97,14 @@ type Department struct {
 	CreatedAt      time.Time
 	UpdatedAt      time.Time
 	HeadEmployeeID *uuid.UUID
+}
+
+type Discovery struct {
+	PlayerID      uuid.UUID
+	AssetID       uuid.UUID
+	ObjectID      *uuid.UUID
+	DiscoveredVia string
+	DiscoveredAt  time.Time
 }
 
 type Employee struct {
@@ -133,6 +152,21 @@ type EnterpriseIdentity struct {
 	UpdatedAt    time.Time
 }
 
+type Interaction struct {
+	ID              uuid.UUID
+	PlayerID        uuid.UUID
+	CompanyID       uuid.UUID
+	InteractionType string
+	ZoneID          *uuid.UUID
+	ObjectID        *uuid.UUID
+	EmployeeID      *uuid.UUID
+	Outcome         string
+	Reason          *string
+	XpAwarded       int32
+	RequestID       *string
+	CreatedAt       time.Time
+}
+
 type Location struct {
 	ID           uuid.UUID
 	CompanyID    uuid.UUID
@@ -152,6 +186,21 @@ type Player struct {
 	DisplayName string
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
+}
+
+type PlayerProgress struct {
+	PlayerID      uuid.UUID
+	Xp            int32
+	CurrentZoneID *uuid.UUID
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
+}
+
+type PlayerZoneUnlock struct {
+	PlayerID   uuid.UUID
+	ZoneID     uuid.UUID
+	Source     string
+	UnlockedAt time.Time
 }
 
 type Scenario struct {
