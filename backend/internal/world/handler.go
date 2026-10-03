@@ -1,6 +1,7 @@
 package world
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"log/slog"
@@ -12,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/Darkload9999/VORTECH/backend/internal/asset"
+	"github.com/Darkload9999/VORTECH/backend/internal/auth"
 	"github.com/Darkload9999/VORTECH/backend/internal/company"
 	"github.com/Darkload9999/VORTECH/backend/internal/database/db"
 	"github.com/Darkload9999/VORTECH/backend/internal/httpx"
@@ -19,16 +21,63 @@ import (
 
 var objectKey = regexp.MustCompile(`^[a-z0-9][a-z0-9_.-]{0,127}$`)
 
-// Handler serves the authoritative world model.
-type Handler struct {
-	dir *company.Directory
-	q   *db.Queries
-	log *slog.Logger
+// CodeZoneLocked is returned when a player asks for a zone (or an object in
+// a zone) they have not unlocked.
+const CodeZoneLocked = "ZONE_LOCKED"
+
+// AccessResolver computes the caller's access to every zone of a company,
+// returning nil for callers without a player profile. The career module
+// implements it; the interface keeps world free of progression internals.
+type AccessResolver interface {
+	ZoneAccess(ctx context.Context, companyID uuid.UUID, p *auth.Principal) (map[uuid.UUID]Decision, error)
 }
 
-// NewHandler returns a Handler.
-func NewHandler(dir *company.Directory, q *db.Queries, log *slog.Logger) *Handler {
-	return &Handler{dir: dir, q: q, log: log}
+// Handler serves the authoritative world model.
+type Handler struct {
+	dir    *company.Directory
+	q      *db.Queries
+	access AccessResolver
+	log    *slog.Logger
+}
+
+// NewHandler returns a Handler. access may be nil, in which case no
+// per-player access information is computed or enforced.
+func NewHandler(dir *company.Directory, q *db.Queries, access AccessResolver, log *slog.Logger) *Handler {
+	return &Handler{dir: dir, q: q, access: access, log: log}
+}
+
+// zoneAccess returns the caller's per-zone decisions (nil for non-players).
+func (h *Handler) zoneAccess(r *http.Request, companyID uuid.UUID) (map[uuid.UUID]Decision, error) {
+	if h.access == nil {
+		return nil, nil
+	}
+	p, _ := auth.FromContext(r.Context())
+	return h.access.ZoneAccess(r.Context(), companyID, p)
+}
+
+// enforceZone denies players access to the contents of zones they have
+// not unlocked. Staff with world:inspect:locked see everything.
+func (h *Handler) enforceZone(w http.ResponseWriter, r *http.Request, companyID, zoneID uuid.UUID) bool {
+	if p, ok := auth.FromContext(r.Context()); ok && p.Can(auth.PermWorldInspectLocked) {
+		return true
+	}
+	decisions, err := h.zoneAccess(r, companyID)
+	if err != nil {
+		httpx.Fail(w, r, h.log, err)
+		return false
+	}
+	if decisions == nil {
+		return true
+	}
+	if d := decisions[zoneID]; !d.Accessible {
+		httpx.WriteAPIError(w, r, &httpx.Error{
+			Status: http.StatusForbidden, Code: CodeZoneLocked,
+			Message: "You have not unlocked this zone yet.",
+			Details: map[string]any{"reason": d.Reason, "required_rank": d.RequiredRank},
+		})
+		return false
+	}
+	return true
 }
 
 // Zone is a navigable area. Progression fields describe the gate; whether a
@@ -43,6 +92,8 @@ type Zone struct {
 	ParentCode         *string    `json:"parent_code"`
 	UnlockedByDefault  bool       `json:"unlocked_by_default"`
 	RequiredCareerRank int32      `json:"required_career_rank"`
+	// Access is the caller's access to the zone; null for non-players.
+	Access *Decision `json:"access"`
 }
 
 // WorldView is GET /api/v1/world.
@@ -73,12 +124,21 @@ func (h *Handler) World(w http.ResponseWriter, r *http.Request) {
 		httpx.Fail(w, r, h.log, err)
 		return
 	}
+	decisions, err := h.zoneAccess(r, c.ID)
+	if err != nil {
+		httpx.Fail(w, r, h.log, err)
+		return
+	}
 	zones := make([]Zone, len(rows))
 	for i, z := range rows {
 		zones[i] = Zone{
 			ID: z.ID, Code: z.Code, Name: z.Name, Kind: z.Kind, Description: z.Description,
 			ParentID: z.ParentID, ParentCode: z.ParentCode,
 			UnlockedByDefault: z.UnlockedByDefault, RequiredCareerRank: z.RequiredCareerRank,
+		}
+		if decisions != nil {
+			d := decisions[z.ID]
+			zones[i].Access = &d
 		}
 	}
 	httpx.JSON(w, http.StatusOK, WorldView{
@@ -164,6 +224,9 @@ func (h *Handler) Zone(w http.ResponseWriter, r *http.Request) {
 	}
 	if err != nil {
 		httpx.Fail(w, r, h.log, err)
+		return
+	}
+	if !h.enforceZone(w, r, c.ID, z.ID) {
 		return
 	}
 	d := ZoneDetail{
@@ -276,6 +339,9 @@ func (h *Handler) Object(w http.ResponseWriter, r *http.Request) {
 	}
 	if err != nil {
 		httpx.Fail(w, r, h.log, err)
+		return
+	}
+	if !h.enforceZone(w, r, c.ID, o.ZoneID) {
 		return
 	}
 

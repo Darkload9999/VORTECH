@@ -7,11 +7,13 @@ import (
 	"github.com/Darkload9999/VORTECH/backend/api"
 	"github.com/Darkload9999/VORTECH/backend/internal/asset"
 	"github.com/Darkload9999/VORTECH/backend/internal/auth"
+	"github.com/Darkload9999/VORTECH/backend/internal/career"
 	"github.com/Darkload9999/VORTECH/backend/internal/company"
 	"github.com/Darkload9999/VORTECH/backend/internal/config"
 	"github.com/Darkload9999/VORTECH/backend/internal/employee"
 	"github.com/Darkload9999/VORTECH/backend/internal/health"
 	"github.com/Darkload9999/VORTECH/backend/internal/httpx"
+	"github.com/Darkload9999/VORTECH/backend/internal/interaction"
 	"github.com/Darkload9999/VORTECH/backend/internal/player"
 	"github.com/Darkload9999/VORTECH/backend/internal/world"
 )
@@ -23,15 +25,17 @@ const (
 
 // deps are the constructed modules the HTTP layer routes to.
 type deps struct {
-	cfg       *config.Config
-	log       *slog.Logger
-	health    *health.Service
-	authn     *auth.Authenticator
-	players   *player.Handler
-	companies *company.Handler
-	employees *employee.Handler
-	assets    *asset.Handler
-	world     *world.Handler
+	cfg          *config.Config
+	log          *slog.Logger
+	health       *health.Service
+	authn        *auth.Authenticator
+	players      *player.Handler
+	companies    *company.Handler
+	employees    *employee.Handler
+	assets       *asset.Handler
+	world        *world.Handler
+	progress     *career.Handler
+	interactions *interaction.Handler
 }
 
 // newHandler is the composition root for HTTP routes. Every route except the
@@ -47,6 +51,8 @@ func newHandler(d deps) http.Handler {
 	protect := func(perm auth.Permission, h http.HandlerFunc) http.Handler { return d.authn.Protect(perm, h) }
 
 	r.Handle("GET /api/v1/me", protect(auth.PermProfileReadOwn, d.players.Me))
+	r.Handle("GET /api/v1/me/progress", protect(auth.PermScenarioPlay, d.progress.Me))
+	r.Handle("POST /api/v1/interactions", protect(auth.PermScenarioPlay, d.interactions.Create))
 
 	r.Handle("GET /api/v1/company", protect(auth.PermWorldRead, d.companies.Get))
 	r.Handle("GET /api/v1/company/departments", protect(auth.PermWorldRead, d.companies.Departments))

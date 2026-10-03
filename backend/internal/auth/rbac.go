@@ -30,6 +30,7 @@ type Permission string
 const (
 	PermProfileReadOwn     Permission = "profile:read:own"
 	PermWorldRead          Permission = "world:read"
+	PermWorldInspectLocked Permission = "world:inspect:locked"
 	PermScenarioPlay       Permission = "scenario:play"
 	PermRangeUseOwn        Permission = "range:use:own"
 	PermEvidenceManageOwn  Permission = "evidence:manage:own"
@@ -47,13 +48,13 @@ var rolePermissions = map[Role][]Permission{
 		PermProfileReadOwn, PermWorldRead, PermScenarioPlay, PermRangeUseOwn, PermEvidenceManageOwn,
 	},
 	RoleInstructor: {
-		PermProfileReadOwn, PermWorldRead, PermStudentRead, PermScenarioAssign, PermProgressReview,
+		PermProfileReadOwn, PermWorldRead, PermWorldInspectLocked, PermStudentRead, PermScenarioAssign, PermProgressReview,
 	},
 	RoleScenarioCreator: {
-		PermProfileReadOwn, PermWorldRead, PermScenarioCreate, PermScenarioEdit, PermScenarioPublish,
+		PermProfileReadOwn, PermWorldRead, PermWorldInspectLocked, PermScenarioCreate, PermScenarioEdit, PermScenarioPublish,
 	},
 	RoleAdmin: {
-		PermProfileReadOwn, PermWorldRead, PermStudentRead, PermScenarioAssign, PermProgressReview,
+		PermProfileReadOwn, PermWorldRead, PermWorldInspectLocked, PermStudentRead, PermScenarioAssign, PermProgressReview,
 		PermScenarioCreate, PermScenarioEdit, PermScenarioPublish, PermPlatformAdminister,
 	},
 }
