@@ -11,9 +11,11 @@ import (
 )
 
 type Querier interface {
+	AddPlayerXP(ctx context.Context, arg AddPlayerXPParams) (int32, error)
 	// Run before upserting so hostnames/IPs can move between assets within one
 	// import without tripping the per-company unique indexes.
 	ClearAssetAddresses(ctx context.Context, companyID uuid.UUID) error
+	CountDiscoveries(ctx context.Context, arg CountDiscoveriesParams) (int32, error)
 	DeactivateOtherScenarios(ctx context.Context, id uuid.UUID) error
 	DeleteCompanyRelationships(ctx context.Context, companyID uuid.UUID) error
 	DeleteCompanySchedules(ctx context.Context, companyID uuid.UUID) error
@@ -24,6 +26,7 @@ type Querier interface {
 	DeleteStaleLocations(ctx context.Context, arg DeleteStaleLocationsParams) (int64, error)
 	DeleteStaleWorldObjects(ctx context.Context, arg DeleteStaleWorldObjectsParams) (int64, error)
 	DeleteStaleZones(ctx context.Context, arg DeleteStaleZonesParams) (int64, error)
+	EnsurePlayerProgress(ctx context.Context, playerID uuid.UUID) error
 	// Read side for company, departments and employees. Every query is scoped by
 	// company_id so one company's data never leaks into another world.
 	GetActiveCompany(ctx context.Context) (GetActiveCompanyRow, error)
@@ -31,7 +34,10 @@ type Querier interface {
 	GetCompanyIDByScenario(ctx context.Context, scenarioID uuid.UUID) (uuid.UUID, error)
 	GetCompanyStats(ctx context.Context, companyID uuid.UUID) (GetCompanyStatsRow, error)
 	GetEmployee(ctx context.Context, arg GetEmployeeParams) (GetEmployeeRow, error)
+	GetInteractionNPC(ctx context.Context, arg GetInteractionNPCParams) (GetInteractionNPCRow, error)
+	GetInteractionObject(ctx context.Context, arg GetInteractionObjectParams) (GetInteractionObjectRow, error)
 	GetPlayerIDByUserID(ctx context.Context, userID uuid.UUID) (uuid.UUID, error)
+	GetPlayerProgress(ctx context.Context, playerID uuid.UUID) (GetPlayerProgressRow, error)
 	// Write side of the scenario importer. Entities are upserted by natural key
 	// so their IDs survive re-imports; anything no longer present in the
 	// scenario files is pruned with the Delete* queries.
@@ -40,7 +46,11 @@ type Querier interface {
 	GetUserProfile(ctx context.Context, userID uuid.UUID) (GetUserProfileRow, error)
 	GetWorldObjectByKey(ctx context.Context, arg GetWorldObjectByKeyParams) (GetWorldObjectByKeyRow, error)
 	GetZone(ctx context.Context, arg GetZoneParams) (GetZoneRow, error)
+	GrantZoneUnlock(ctx context.Context, arg GrantZoneUnlockParams) error
 	InsertAuditLog(ctx context.Context, arg InsertAuditLogParams) (InsertAuditLogRow, error)
+	// Returns no rows if the player already discovered the asset.
+	InsertDiscovery(ctx context.Context, arg InsertDiscoveryParams) (uuid.UUID, error)
+	InsertInteraction(ctx context.Context, arg InsertInteractionParams) (InsertInteractionRow, error)
 	// Returns the new player's id, or no rows if the user already has one.
 	InsertPlayerIfMissing(ctx context.Context, arg InsertPlayerIfMissingParams) (uuid.UUID, error)
 	InsertRelationship(ctx context.Context, arg InsertRelationshipParams) error
@@ -53,6 +63,7 @@ type Querier interface {
 	// Newest first with keyset pagination: pass the (occurred_at, id) of the
 	// last row of the previous page as the cursor, or NULLs for the first page.
 	ListAuditLogs(ctx context.Context, arg ListAuditLogsParams) ([]AuditLog, error)
+	ListCareerLevels(ctx context.Context) ([]ListCareerLevelsRow, error)
 	ListCompanyRelationships(ctx context.Context, companyID uuid.UUID) ([]ListCompanyRelationshipsRow, error)
 	ListDepartments(ctx context.Context, companyID uuid.UUID) ([]ListDepartmentsRow, error)
 	ListDirectReports(ctx context.Context, arg ListDirectReportsParams) ([]ListDirectReportsRow, error)
@@ -70,10 +81,15 @@ type Querier interface {
 	ListZoneEmployees(ctx context.Context, arg ListZoneEmployeesParams) ([]ListZoneEmployeesRow, error)
 	ListZoneLocations(ctx context.Context, arg ListZoneLocationsParams) ([]ListZoneLocationsRow, error)
 	ListZoneObjects(ctx context.Context, arg ListZoneObjectsParams) ([]ListZoneObjectsRow, error)
+	ListZoneRules(ctx context.Context, companyID uuid.UUID) ([]ListZoneRulesRow, error)
+	ListZoneUnlocks(ctx context.Context, arg ListZoneUnlocksParams) ([]ListZoneUnlocksRow, error)
 	ListZones(ctx context.Context, companyID uuid.UUID) ([]ListZonesRow, error)
+	// Serialises a player's state changes for the duration of the transaction.
+	LockPlayerProgress(ctx context.Context, playerID uuid.UUID) (LockPlayerProgressRow, error)
 	// Serialises concurrent imports of the same scenario for the transaction.
 	LockScenarioImport(ctx context.Context, slug string) error
 	PublishAndActivateScenario(ctx context.Context, id uuid.UUID) error
+	SetCurrentZone(ctx context.Context, arg SetCurrentZoneParams) error
 	SetDepartmentLinks(ctx context.Context, arg SetDepartmentLinksParams) error
 	SetEmployeeManager(ctx context.Context, arg SetEmployeeManagerParams) error
 	SetZoneParent(ctx context.Context, arg SetZoneParentParams) error
