@@ -172,6 +172,7 @@ func (w *writer) write(ctx context.Context) error {
 		{"assets", w.assetsAndNetworks},
 		{"world objects", w.objects},
 		{"relationships", w.relationships},
+		{"range templates", w.rangeTemplates},
 		{"prune", w.prune},
 	}
 	for _, s := range steps {
@@ -514,6 +515,37 @@ func (w *writer) relationships(ctx context.Context) error {
 		}
 	}
 	w.res.Counts["relationships"] = n
+	return nil
+}
+
+// rangeTemplates upserts templates by slug. Templates dropped from the
+// files are deactivated rather than deleted: ranges reference them.
+func (w *writer) rangeTemplates(ctx context.Context) error {
+	scenarioID := w.res.ScenarioID
+	keep := make([]string, 0, len(w.b.RangeTemplates))
+	for _, t := range w.b.RangeTemplates {
+		spec := t.Spec()
+		raw, err := json.Marshal(spec)
+		if err != nil {
+			return fmt.Errorf("encode %s: %w", t.Slug, err)
+		}
+		cpu, mem, storage := spec.Totals()
+		if _, err := w.q.UpsertRangeTemplate(ctx, db.UpsertRangeTemplateParams{
+			ScenarioID: scenarioID, Slug: t.Slug, Name: t.Name, Description: t.Description,
+			TtlSeconds: t.TTLMinutes * 60, CpuMillis: cpu, MemoryMib: mem, StorageMib: storage, Spec: raw,
+		}); err != nil {
+			return fmt.Errorf("%s: %w", t.Slug, err)
+		}
+		keep = append(keep, t.Slug)
+	}
+	w.res.Counts["range_templates"] = len(keep)
+	n, err := w.q.DeactivateStaleRangeTemplates(ctx, db.DeactivateStaleRangeTemplatesParams{ScenarioID: scenarioID, Keep: keep})
+	if err != nil {
+		return fmt.Errorf("deactivate: %w", err)
+	}
+	if n > 0 {
+		w.res.Pruned["range_templates"] = n
+	}
 	return nil
 }
 

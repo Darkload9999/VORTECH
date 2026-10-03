@@ -1,0 +1,105 @@
+# Range templates: the isolated, per-player infrastructure an engagement
+# runs against. Each template becomes one Kubernetes namespace per player
+# with default-deny networking; only the flows listed under `network` are
+# allowed. Images must be pinned (no :latest) and are re-checked against the
+# operator's RANGE_IMAGE_ALLOWLIST when a range is provisioned.
+#
+# Values of the form "secret:<key>" are generated per range and only ever
+# stored in a Kubernetes Secret.
+
+x-workstation: &workstation
+  name: workstation
+  role: workstation
+  image: docker.io/library/alpine:3.20
+  command: ["sleep", "infinity"]
+  cpu_millis: 200
+  memory_mib: 128
+  storage_mib: 128
+  run_as_user: 1000
+  read_only_root: true
+  writable_paths: ["/tmp", "/home/analyst"]
+  env:
+    HOME: /home/analyst
+  terminal: true
+
+x-web01: &web01
+  name: web01
+  role: web
+  image: docker.io/nginxinc/nginx-unprivileged:1.27-alpine
+  ports: [{ name: http, port: 8080 }]
+  cpu_millis: 100
+  memory_mib: 64
+  storage_mib: 64
+  run_as_user: 101
+  read_only_root: true
+  writable_paths: ["/tmp", "/var/cache/nginx"]
+
+templates:
+  - slug: nexora-web-basics
+    name: NEXORA public web tier
+    description: >-
+      An analyst workstation and NEXORA's public web server. The smallest
+      range, used for onboarding engagements.
+    ttl_minutes: 60
+    workloads:
+      - *workstation
+      - *web01
+    network:
+      - { from: workstation, to: web01, port: 8080 }
+
+  - slug: nexora-corp-net
+    name: NEXORA corporate network
+    description: >-
+      Web, application, database and source-control tiers of NEXORA's
+      headquarters network. The web tier reaches the application, only the
+      application reaches the database, and the workstation sees the
+      user-facing services but not the database.
+    ttl_minutes: 120
+    workloads:
+      - *workstation
+      - *web01
+      - name: app01
+        role: app
+        image: docker.io/traefik/whoami:v1.10.3
+        args: ["--port", "8080"]
+        ports: [{ name: http, port: 8080 }]
+        cpu_millis: 50
+        memory_mib: 32
+        storage_mib: 0
+        run_as_user: 65532
+        read_only_root: true
+      - name: db01
+        role: database
+        image: docker.io/library/postgres:17-alpine
+        ports: [{ name: postgres, port: 5432 }]
+        env:
+          POSTGRES_USER: nexora_app
+          POSTGRES_DB: nexora
+          POSTGRES_PASSWORD: "secret:db_password"
+          PGDATA: /var/lib/postgresql/data/pgdata
+        cpu_millis: 300
+        memory_mib: 256
+        storage_mib: 512
+        run_as_user: 70
+        read_only_root: true
+        writable_paths: ["/var/lib/postgresql/data", "/var/run/postgresql", "/tmp"]
+      - name: git01
+        role: git
+        image: docker.io/gitea/gitea:1.22-rootless
+        ports: [{ name: http, port: 3000 }]
+        env:
+          GITEA__security__INSTALL_LOCK: "true"
+          GITEA__security__SECRET_KEY: "secret:gitea_secret_key"
+          GITEA__server__ROOT_URL: http://git01:3000/
+        cpu_millis: 300
+        memory_mib: 256
+        storage_mib: 512
+        run_as_user: 1000
+        read_only_root: true
+        writable_paths: ["/var/lib/gitea", "/etc/gitea", "/tmp"]
+    network:
+      - { from: workstation, to: web01, port: 8080 }
+      - { from: workstation, to: app01, port: 8080 }
+      - { from: workstation, to: git01, port: 3000 }
+      - { from: web01, to: app01, port: 8080 }
+      - { from: app01, to: db01, port: 5432 }

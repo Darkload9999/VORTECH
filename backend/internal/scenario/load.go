@@ -37,16 +37,18 @@ const (
 // definition it must satisfy. Decoding order does not matter; cross-file
 // references are validated afterwards.
 var sourceFiles = []struct {
-	name string
-	def  string
+	name     string
+	def      string
+	optional bool
 }{
-	{"scenario.yaml", "scenario"},
-	{"company.yaml", "company"},
-	{"departments.yaml", "departments"},
-	{"employees.yaml", "employees"},
-	{"network.yaml", "network"},
-	{"assets.yaml", "assets"},
-	{"world.yaml", "world"},
+	{"scenario.yaml", "scenario", false},
+	{"company.yaml", "company", false},
+	{"departments.yaml", "departments", false},
+	{"employees.yaml", "employees", false},
+	{"network.yaml", "network", false},
+	{"assets.yaml", "assets", false},
+	{"world.yaml", "world", false},
+	{"ranges.yaml", "ranges", true},
 }
 
 // Problem is one validation finding.
@@ -125,6 +127,9 @@ func Load(dir string) (*Bundle, error) {
 
 	for _, f := range sourceFiles {
 		raw, err := readLimited(filepath.Join(dir, f.name))
+		if f.optional && errors.Is(err, errMissing) {
+			continue
+		}
 		if err != nil {
 			problems = append(problems, Problem{File: f.name, Message: err.Error()})
 			continue
@@ -163,11 +168,13 @@ func Load(dir string) (*Bundle, error) {
 	return b, nil
 }
 
+var errMissing = errors.New("file is missing")
+
 func readLimited(path string) ([]byte, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return nil, errors.New("file is missing")
+			return nil, errMissing
 		}
 		return nil, err
 	}
@@ -319,6 +326,12 @@ func decodeInto(b *Bundle, def string, doc []byte) error {
 		b.Assets, b.Relations = f.Assets, f.Relationships
 	case "world":
 		return strict(&b.World)
+	case "ranges":
+		var f rangesFile
+		if err := strict(&f); err != nil {
+			return err
+		}
+		b.RangeTemplates = f.Templates
 	default:
 		return fmt.Errorf("unknown definition %q", def)
 	}

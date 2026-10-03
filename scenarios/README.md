@@ -12,8 +12,18 @@ scenarios/<slug>/
 ├── employees.yaml    employees (NPCs), fictional identities, weekly schedules, service accounts
 ├── network.yaml      network segments (imported as assets of type "network")
 ├── assets.yaml       devices, servers, applications, groups, cloud + explicit graph edges
-└── world.yaml        zones → locations → interactive Three.js objects
+├── world.yaml        zones → locations → interactive Three.js objects
+└── ranges.yaml       (optional) range templates: workloads + allowed network flows
 ```
+
+`ranges.yaml` declares the isolated infrastructure players work against. Each
+template lists its workloads (pinned image, non-root UID, CPU, memory and
+storage, read-only root with explicit writable paths, and exactly one
+`terminal: true` workstation) and the only network flows allowed between
+them; everything else is denied. Values such as `"secret:db_password"` are
+generated per range and stored only in a Kubernetes Secret. Removing a
+template deactivates it rather than deleting it, so existing ranges keep
+their history.
 
 Scenarios contain **no flags**: progression comes from engagements and
 objectives, not CTF-style answers. Everything is fictional. Company email

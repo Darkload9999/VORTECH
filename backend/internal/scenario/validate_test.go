@@ -65,6 +65,9 @@ func TestValidationFailures(t *testing.T) {
 		{"invalid YAML", "network.yaml", "networks:", "networks: [unclosed", "invalid YAML"},
 		{"two documents", "scenario.yaml", "kind: Scenario", "kind: Scenario\n---\nkind: Other", "exactly one YAML document"},
 
+		{"range ttl too long", "ranges.yaml", "ttl_minutes: 60", "ttl_minutes: 100000", "/ttl_minutes"},
+		{"range unknown field", "ranges.yaml", "cpu_millis: 50", "cpu_millis: 50\n        privileged: true", "privileged"},
+
 		// Cross-reference.
 		{"unknown department", "employees.yaml", "department: FIN\n    manager: EMP-0008\n    location: FINANCE_DEPT\n    persona: Helpful",
 			"department: NOPE\n    manager: EMP-0008\n    location: FINANCE_DEPT\n    persona: Helpful", `unknown department "NOPE"`},
@@ -92,6 +95,33 @@ func TestValidationFailures(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			expectProblem(t, mutated(t, tt.file, tt.old, tt.new), tt.file, tt.want)
 		})
+	}
+}
+
+func TestRangeTemplateSpecChecks(t *testing.T) {
+	tests := []struct{ name, old, new, want string }{
+		{"latest tag", "image: docker.io/library/alpine:3.20", "image: docker.io/library/alpine:latest", "latest"},
+		{"unqualified image", "image: docker.io/traefik/whoami:v1.10.3", "image: whoami", "fully qualified"},
+		{"rule to unknown workload", "{ from: app01, to: db01, port: 5432 }", "{ from: app01, to: db99, port: 5432 }", `unknown workload "db99"`},
+		{"rule to closed port", "{ from: app01, to: db01, port: 5432 }", "{ from: app01, to: db01, port: 5433 }", "does not expose port 5433"},
+		{"no terminal", "terminal: true", "terminal: false", "exactly one workload"},
+		{"duplicate slug", "slug: nexora-corp-net", "slug: nexora-web-basics", `duplicate range template "nexora-web-basics"`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			expectProblem(t, mutated(t, "ranges.yaml", tt.old, tt.new), "ranges.yaml", tt.want)
+		})
+	}
+}
+
+func TestRangesFileIsOptional(t *testing.T) {
+	dir := mutated(t, "", "", "")
+	if err := os.Remove(filepath.Join(dir, "ranges.yaml")); err != nil {
+		t.Fatal(err)
+	}
+	b, err := Load(dir)
+	if err != nil || len(b.RangeTemplates) != 0 {
+		t.Fatalf("scenario without ranges.yaml: %v", err)
 	}
 }
 
