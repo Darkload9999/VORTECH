@@ -22,7 +22,8 @@ Getting started: see [backend/README.md](backend/README.md).
 
 1. Branch from `main`, using `feat/…`, `fix/…`, `docs/…` or `chore/…`.
 2. Before pushing, run `make check` in `backend/`. If you touched the database
-   or auth, also run `make deps-up && make test-integration`.
+   or auth, also run `make deps-up && make test-integration`. For range or
+   Kubernetes changes, run `make cluster-up` first so the real-K3s tests run too.
 3. Open a pull request. CI runs lint, static analysis, a sqlc staleness check,
    unit and PostgreSQL integration tests, govulncheck and an image build.
    Merge only when it is green.
