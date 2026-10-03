@@ -25,8 +25,9 @@ module boundaries, no microservices.
 | 2 | Keycloak OIDC/PKCE, JWT validation, player mapping, RBAC, audit, `/me`, OpenAPI | **done** |
 | 3a | Scenario-as-code (JSON Schema + importer), NEXORA seed, company/employee/asset/world APIs, digital-twin graph | **done** |
 | 3b | Server-validated interactions, career levels, XP and discoveries, zone access and unlocks, `/me/progress` | **done** |
-| 4 | Real-time: authenticated WebSocket gateway, internal event bus, notifications, world events | next |
-| 5–9 | Ranges, terminal, telemetry, storage/observability, infrastructure | planned |
+| 4 | Real-time: event bus, ticket-authenticated WebSocket gateway, notifications, world announcements | **done** |
+| 5 | Range management: range model, lifecycle state machine, job worker, capacity manager, K3s namespaces/quotas/network policies, reconciliation | next |
+| 6–9 | Terminal, telemetry, storage/observability, infrastructure | planned |
 
 ## Requirements
 
@@ -109,6 +110,9 @@ internal/
   world/        zones, locations, objects, Three.js object → asset resolution, zone access rules
   career/       career ladder, XP, current zone, zone unlocks, GET /me/progress
   interaction/  POST /interactions: server-side rules, discoveries, per-player rate limit
+  event/        in-process event bus (Publisher/Subscriber interfaces; NATS-replaceable)
+  websocket/    ticket-authenticated WebSocket gateway: topics, heartbeats, limits, backpressure
+  notification/ durable per-user notifications and REST API
   buildinfo/    version metadata injected via -ldflags
   department/ npc/
   interaction/ engagement/ career/ event/ websocket/ terminal/
@@ -381,6 +385,74 @@ double-award XP or race on the current zone. The test suite proves this with
 
 Everything is persisted in PostgreSQL (`player_progress`,
 `player_zone_unlocks`, `discoveries`, `interactions`) and survives restarts.
+
+## Real-time
+
+```
+REST interaction ──▶ transaction commits ──▶ event bus ──▶ WebSocket gateway ──▶ player's sockets
+                      (notifications are                    (topic fan-out)
+                       written in the same tx)
+```
+
+**Connecting.**
+
+1. `POST /api/v1/ws/tickets` with the bearer token returns a **single-use**
+   ticket that is valid for 30 s.
+2. Open `GET /ws?ticket=…`. Access tokens never travel in URLs, and the access
+   log omits query strings.
+3. The server's first frame is `session.welcome` with the connection's topics
+   and heartbeat interval.
+
+**Frames** follow the spec's envelope:
+
+```json
+{ "id": "…", "type": "asset.discovered", "topic": "player:…", "timestamp": "2026-10-02T10:30:00Z", "data": { … } }
+```
+
+**Topics** are authorised by the server:
+- `player:<id>` is private and assigned automatically. Nobody can subscribe to
+  another player's topic.
+- `world:<company>` is assigned automatically.
+- `zone:<id>` must be requested with `{"type":"subscribe","topic":"zone:<id>"}`.
+  It is granted only if the player can access the zone; staff with
+  `world:inspect:locked` can follow any zone in the world.
+- Presence events (`player.connected` / `player.disconnected`) are internal and
+  never sent to other players.
+
+**Events in this phase:**
+
+| Event | Topic |
+|---|---|
+| `player.interacted` | private |
+| `player.entered_zone` | private |
+| `asset.discovered` | private |
+| `career.level_up` | private |
+| `notification.created` | private |
+| `world.announcement` | world (admin broadcast via `POST /api/v1/admin/announcements`, audited) |
+
+**Delivery** is at-most-once and happens only **after commit**, so clients never
+see state that later rolls back. Notifications (for example "Promoted to
+Security Analyst I") are stored in PostgreSQL and written in the same
+transaction as the change that caused them. After a reconnect, clients
+catch up with `GET /api/v1/notifications`, then mark them with
+`POST /api/v1/notifications/{id}/read` or `/read-all`.
+
+**Limits and robustness:**
+- Message limits: 4 KiB per message, 10 client messages/s (burst 20), 20 topics per connection.
+- Connection limits: 5 per user and 5000 in total.
+- Heartbeat: a ping every 25 s.
+- Backpressure: each connection has a send queue of 256 frames. A slow consumer
+  is disconnected with `1013` instead of being buffered without limit. The bus
+  never blocks publishers.
+- Connections are closed with `4001` after `WS_MAX_CONNECTION_AGE` (30 min), so
+  they're re-authorised with a fresh ticket.
+- Origin checking: same-origin plus `WS_ALLOWED_ORIGINS` (the Vite dev server).
+- On shutdown, sockets are closed with `1001` so clients reconnect elsewhere, and
+  handlers are awaited.
+- The `http.Server` read/write deadlines are cleared on upgrade. A regression test
+  keeps a connection alive past short server timeouts.
+- The bus and ticket store are in-process and move to NATS and Valkey when the
+  API scales out. Business code depends only on the interfaces.
 
 ## Configuration
 
