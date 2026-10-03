@@ -1,8 +1,10 @@
-// Package cyberrange manages isolated cyber ranges: the lifecycle state
-// machine (REQUESTED ... DESTROYED, FAILED, EXPIRED), asynchronous
-// provisioning jobs, the capacity scheduler, the warm pool and
-// reconciliation against K3s. The directory is not named "range" because
-// range is a Go keyword.
+// Package cyberrange manages isolated cyber ranges: range templates
+// (validated workload specs), the lifecycle state machine (REQUESTED ...
+// DESTROYED, FAILED, EXPIRED), capacity accounting and the player-facing
+// API. The directory is not named "range" because range is a Go keyword.
 //
-// Implemented in phase 5.
+// Subpackages keep Kubernetes out of the API binary: kube renders and
+// applies range namespaces with client-go, and controller (run by the
+// worker) executes provisioning jobs, admission, expiry and
+// reconciliation.
 package cyberrange
