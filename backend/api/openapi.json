@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "VORTECH Platform API",
-    "version": "0.4.0",
+    "version": "0.5.0",
     "description": "Authoritative control plane for the VORTECH cybersecurity simulation platform. Access tokens are obtained from Keycloak with the Authorization Code + PKCE (S256) flow by the browser and sent as `Authorization: Bearer <token>`. The API never accepts passwords and never accepts tokens from query strings or cookies."
   },
   "servers": [
@@ -34,6 +34,10 @@
     {
       "name": "gameplay",
       "description": "Server-validated interactions and player progression"
+    },
+    {
+      "name": "realtime",
+      "description": "WebSocket gateway, tickets and notifications"
     }
   ],
   "paths": {
@@ -975,6 +979,435 @@
                 }
               }
             }
+          },
+          "503": {
+            "$ref": "#/components/responses/WorldNotActive"
+          }
+        }
+      }
+    },
+    "/ws": {
+      "get": {
+        "tags": [
+          "realtime"
+        ],
+        "summary": "WebSocket gateway",
+        "operationId": "connectWebSocket",
+        "security": [],
+        "description": "Authenticated with a single-use ticket from POST /api/v1/ws/tickets (never with an access token in the URL).\n\nServer → client frames: {\"id\",\"type\",\"topic\",\"timestamp\",\"data\"}. Control frames use session.* types: session.welcome (connection_id, topics, heartbeat_interval_seconds, expires_at), session.subscribed, session.unsubscribed, session.pong, session.error (code, message).\n\nEvent types: player.interacted, player.entered_zone, asset.discovered, career.level_up, notification.created (private player topic) and world.announcement (world topic).\n\nClient → server: {\"type\":\"subscribe\",\"topic\":\"zone:<uuid>\"}, {\"type\":\"unsubscribe\",\"topic\":\"...\"}, {\"type\":\"ping\"}. The private player topic and the world topic are assigned automatically; only zone topics can be added, for zones the caller can access. Limits: 4 KiB per message, 10 messages/s (burst 20), 20 topics, 5 connections per user.\n\nClose codes: 1001 server going away (reconnect), 1008 policy violation (rate limit), 1009 message too big, 1013 slow consumer (reconnect), 4001 session expired (get a new ticket and reconnect). After reconnecting, fetch missed notifications via GET /api/v1/notifications.",
+        "parameters": [
+          {
+            "name": "ticket",
+            "in": "query",
+            "required": true,
+            "description": "Single-use ticket",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "101": {
+            "description": "Switching protocols"
+          },
+          "401": {
+            "description": "INVALID_TICKET",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Origin not allowed"
+          },
+          "429": {
+            "description": "TOO_MANY_CONNECTIONS for this account",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "SERVICE_DRAINING or server connection capacity reached",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/ws/tickets": {
+      "post": {
+        "tags": [
+          "realtime"
+        ],
+        "summary": "Issue a WebSocket ticket",
+        "operationId": "createWebSocketTicket",
+        "description": "Exchanges the bearer token for a single-use ticket (valid 30 s) to present in the /ws handshake.",
+        "security": [
+          {
+            "keycloak": []
+          }
+        ],
+        "x-required-permission": "profile:read:own",
+        "responses": {
+          "201": {
+            "description": "Ticket",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "required": [
+                        "ticket",
+                        "expires_at",
+                        "path"
+                      ],
+                      "properties": {
+                        "ticket": {
+                          "type": "string"
+                        },
+                        "expires_at": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "path": {
+                          "const": "/ws"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "description": "Too many outstanding tickets",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/notifications": {
+      "get": {
+        "tags": [
+          "realtime"
+        ],
+        "summary": "The caller's notifications",
+        "operationId": "listNotifications",
+        "description": "Newest first, keyset-paginated. The source of truth after a WebSocket reconnect.",
+        "security": [
+          {
+            "keycloak": []
+          }
+        ],
+        "x-required-permission": "profile:read:own",
+        "parameters": [
+          {
+            "name": "unread",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "meta"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Notification"
+                      }
+                    },
+                    "meta": {
+                      "type": "object",
+                      "required": [
+                        "limit",
+                        "next_cursor",
+                        "unread"
+                      ],
+                      "properties": {
+                        "limit": {
+                          "type": "integer"
+                        },
+                        "next_cursor": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "unread": {
+                          "type": "integer"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
+    "/api/v1/notifications/{id}/read": {
+      "post": {
+        "tags": [
+          "realtime"
+        ],
+        "summary": "Mark a notification read",
+        "operationId": "markNotificationRead",
+        "security": [
+          {
+            "keycloak": []
+          }
+        ],
+        "x-required-permission": "profile:read:own",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "required": [
+                        "id",
+                        "read_at"
+                      ],
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "read_at": {
+                          "type": "string",
+                          "format": "date-time"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/api/v1/notifications/read-all": {
+      "post": {
+        "tags": [
+          "realtime"
+        ],
+        "summary": "Mark all notifications read",
+        "operationId": "markAllNotificationsRead",
+        "security": [
+          {
+            "keycloak": []
+          }
+        ],
+        "x-required-permission": "profile:read:own",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "required": [
+                        "marked"
+                      ],
+                      "properties": {
+                        "marked": {
+                          "type": "integer"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
+    "/api/v1/admin/announcements": {
+      "post": {
+        "tags": [
+          "realtime"
+        ],
+        "summary": "Broadcast a world announcement",
+        "operationId": "createAnnouncement",
+        "description": "Publishes world.announcement to everyone connected to the active world. Audited.",
+        "security": [
+          {
+            "keycloak": []
+          }
+        ],
+        "x-required-permission": "platform:administer",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "title"
+                ],
+                "properties": {
+                  "title": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "body": {
+                    "type": "string",
+                    "maxLength": 2000
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Published",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "required": [
+                        "event_id",
+                        "topic"
+                      ],
+                      "properties": {
+                        "event_id": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "topic": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
           },
           "503": {
             "$ref": "#/components/responses/WorldNotActive"
@@ -3039,6 +3472,50 @@
                 }
               }
             }
+          }
+        }
+      },
+      "Notification": {
+        "type": "object",
+        "required": [
+          "id",
+          "type",
+          "title",
+          "body",
+          "data",
+          "read_at",
+          "created_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "type": {
+            "type": "string",
+            "examples": [
+              "career.promoted"
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "body": {
+            "type": "string"
+          },
+          "data": {
+            "type": "object"
+          },
+          "read_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
           }
         }
       }

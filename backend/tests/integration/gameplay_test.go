@@ -52,7 +52,7 @@ func newGameStack(t *testing.T, limiter *interaction.Limiter) *gameStack {
 	r := httpx.NewRouter()
 	r.Handle("GET /api/v1/me/progress", authn.Protect(auth.PermScenarioPlay, http.HandlerFunc(career.NewHandler(careers, dir, q, log).Me)))
 	r.Handle("POST /api/v1/interactions", authn.Protect(auth.PermScenarioPlay,
-		http.HandlerFunc(interaction.NewHandler(interaction.NewService(pool, dir, careers), limiter, log).Create)))
+		http.HandlerFunc(interaction.NewHandler(interaction.NewService(pool, dir, careers, nil), limiter, log).Create)))
 	r.Handle("GET /api/v1/world", authn.Protect(auth.PermWorldRead, http.HandlerFunc(wh.World)))
 	r.Handle("GET /api/v1/world/zones/{id}", authn.Protect(auth.PermWorldRead, http.HandlerFunc(wh.Zone)))
 	r.Handle("GET /api/v1/world/objects/{key}", authn.Protect(auth.PermWorldRead, http.HandlerFunc(wh.Object)))
