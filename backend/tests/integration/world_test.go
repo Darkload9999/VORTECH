@@ -82,7 +82,8 @@ func TestScenarioImportLifecycle(t *testing.T) {
 	pool := migratedPool(t)
 	b := loadNexora(t, nexoraDir)
 
-	res, err := scenario.Import(ctx, pool, b, scenario.ImportOptions{Activate: true})
+	// Force: other tests in this package may already have imported NEXORA.
+	res, err := scenario.Import(ctx, pool, b, scenario.ImportOptions{Activate: true, Force: true})
 	if err != nil {
 		t.Fatalf("first import: %v", err)
 	}
@@ -155,7 +156,7 @@ func newWorldStack(t *testing.T) *worldStack {
 	log := testLogger()
 	authn := auth.NewAuthenticator(v, player.NewDirectory(pool, log, 0), audit.NewRecorder(q, log), log)
 	dir := company.NewDirectory(q, 0)
-	ch, eh, ah, wh := company.NewHandler(dir, q, log), employee.NewHandler(dir, q, log), asset.NewHandler(dir, q, log), world.NewHandler(dir, q, log)
+	ch, eh, ah, wh := company.NewHandler(dir, q, log), employee.NewHandler(dir, q, log), asset.NewHandler(dir, q, log), world.NewHandler(dir, q, nil, log)
 
 	r := httpx.NewRouter()
 	p := func(h http.HandlerFunc) http.Handler { return authn.Protect(auth.PermWorldRead, h) }

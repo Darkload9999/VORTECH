@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "VORTECH Platform API",
-    "version": "0.3.0",
+    "version": "0.4.0",
     "description": "Authoritative control plane for the VORTECH cybersecurity simulation platform. Access tokens are obtained from Keycloak with the Authorization Code + PKCE (S256) flow by the browser and sent as `Authorization: Bearer <token>`. The API never accepts passwords and never accepts tokens from query strings or cookies."
   },
   "servers": [
@@ -30,6 +30,10 @@
     {
       "name": "assets",
       "description": "Digital assets and the digital-twin graph"
+    },
+    {
+      "name": "gameplay",
+      "description": "Server-validated interactions and player progression"
     }
   ],
   "paths": {
@@ -754,7 +758,14 @@
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "description": "FORBIDDEN, or ZONE_LOCKED when a player asks for a zone (or an object in a zone) they have not unlocked; details carry reason and required_rank. Staff with world:inspect:locked are exempt.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           },
           "503": {
             "$ref": "#/components/responses/WorldNotActive"
@@ -817,7 +828,14 @@
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "description": "FORBIDDEN, or ZONE_LOCKED when a player asks for a zone (or an object in a zone) they have not unlocked; details carry reason and required_rank. Staff with world:inspect:locked are exempt.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           },
           "503": {
             "$ref": "#/components/responses/WorldNotActive"
@@ -839,6 +857,129 @@
             }
           }
         ]
+      }
+    },
+    "/api/v1/me/progress": {
+      "get": {
+        "tags": [
+          "gameplay"
+        ],
+        "summary": "The caller's progression",
+        "operationId": "getMyProgress",
+        "description": "XP, career level (derived from XP), next level, authoritative current zone, explicit unlocks, per-zone access and discovery count in the active world.",
+        "security": [
+          {
+            "keycloak": []
+          }
+        ],
+        "x-required-permission": "scenario:play",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data"
+                  ],
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/Progress"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "503": {
+            "$ref": "#/components/responses/WorldNotActive"
+          }
+        }
+      }
+    },
+    "/api/v1/interactions": {
+      "post": {
+        "tags": [
+          "gameplay"
+        ],
+        "summary": "Attempt an interaction",
+        "operationId": "createInteraction",
+        "description": "The client states intent; the server decides from authoritative state (zone access by career rank and unlocks, the player's current zone, the object's allowed interactions, NPC availability). Rule denials are normal gameplay and return 200 with outcome=denied and a reason. Every attempt is recorded. Rate limited per player (10/s, burst 20).",
+        "security": [
+          {
+            "keycloak": []
+          }
+        ],
+        "x-required-permission": "scenario:play",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InteractionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Decided (allowed or denied)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data"
+                  ],
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/InteractionOutcome"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "description": "RATE_LIMITED; honour Retry-After.",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "503": {
+            "$ref": "#/components/responses/WorldNotActive"
+          }
+        }
       }
     }
   },
@@ -1012,6 +1153,7 @@
         "enum": [
           "profile:read:own",
           "world:read",
+          "world:inspect:locked",
           "scenario:play",
           "range:use:own",
           "evidence:manage:own",
@@ -2037,7 +2179,8 @@
           "parent_id",
           "parent_code",
           "unlocked_by_default",
-          "required_career_rank"
+          "required_career_rank",
+          "access"
         ],
         "properties": {
           "id": {
@@ -2079,6 +2222,17 @@
           },
           "required_career_rank": {
             "type": "integer"
+          },
+          "access": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ZoneAccessDecision"
+              }
+            ],
+            "description": "The caller's access; null for callers without a player profile."
           }
         }
       },
@@ -2322,6 +2476,16 @@
                 }
               }
             }
+          },
+          "access": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ZoneAccessDecision"
+              }
+            ]
           }
         }
       },
@@ -2513,6 +2677,368 @@
                 }
               }
             ]
+          }
+        }
+      },
+      "ZoneAccessDecision": {
+        "type": "object",
+        "required": [
+          "accessible"
+        ],
+        "properties": {
+          "accessible": {
+            "type": "boolean"
+          },
+          "reason": {
+            "enum": [
+              "ZONE_LOCKED",
+              "INSUFFICIENT_RANK",
+              "PARENT_ZONE_LOCKED",
+              "UNKNOWN_ZONE"
+            ]
+          },
+          "required_rank": {
+            "type": "integer"
+          }
+        }
+      },
+      "CareerLevel": {
+        "type": "object",
+        "required": [
+          "rank",
+          "code",
+          "name",
+          "description",
+          "min_xp"
+        ],
+        "properties": {
+          "rank": {
+            "type": "integer"
+          },
+          "code": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "min_xp": {
+            "type": "integer"
+          }
+        }
+      },
+      "Progress": {
+        "type": "object",
+        "required": [
+          "player_id",
+          "xp",
+          "level",
+          "next_level",
+          "current_zone",
+          "unlocked_zones",
+          "zones",
+          "discoveries"
+        ],
+        "properties": {
+          "player_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "xp": {
+            "type": "integer"
+          },
+          "level": {
+            "$ref": "#/components/schemas/CareerLevel"
+          },
+          "next_level": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/CareerLevel"
+                  },
+                  {
+                    "type": "object",
+                    "required": [
+                      "xp_remaining"
+                    ],
+                    "properties": {
+                      "xp_remaining": {
+                        "type": "integer"
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          "current_zone": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "id",
+                  "code",
+                  "name"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "code": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  }
+                }
+              }
+            ]
+          },
+          "unlocked_zones": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "zone_id",
+                "zone_code",
+                "source",
+                "unlocked_at"
+              ],
+              "properties": {
+                "zone_id": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "zone_code": {
+                  "type": "string"
+                },
+                "source": {
+                  "enum": [
+                    "engagement",
+                    "instructor",
+                    "admin"
+                  ]
+                },
+                "unlocked_at": {
+                  "type": "string",
+                  "format": "date-time"
+                }
+              }
+            }
+          },
+          "zones": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "zone_id",
+                "code",
+                "accessible"
+              ],
+              "properties": {
+                "zone_id": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "code": {
+                  "type": "string"
+                },
+                "accessible": {
+                  "type": "boolean"
+                },
+                "reason": {
+                  "type": "string"
+                },
+                "required_rank": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "discoveries": {
+            "type": "integer"
+          }
+        }
+      },
+      "InteractionRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "type"
+        ],
+        "description": "Set exactly the target for the type: zone_id for ENTER_ZONE/LEAVE_ZONE, employee_id for TALK_TO_NPC, object_key (Three.js object name) otherwise.",
+        "properties": {
+          "type": {
+            "enum": [
+              "ENTER_ZONE",
+              "LEAVE_ZONE",
+              "OPEN_DOOR",
+              "CLOSE_DOOR",
+              "USE_WORKSTATION",
+              "TALK_TO_NPC",
+              "INSPECT_OBJECT",
+              "ACCESS_TERMINAL",
+              "READ_DOCUMENT",
+              "START_ENGAGEMENT"
+            ]
+          },
+          "zone_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "object_key": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9_.-]{0,127}$"
+          },
+          "employee_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "examples": [
+          {
+            "type": "ENTER_ZONE",
+            "zone_id": "01a0fc08-fb2a-7000-8000-000000000000"
+          },
+          {
+            "type": "USE_WORKSTATION",
+            "object_key": "finance_pc_04"
+          }
+        ]
+      },
+      "InteractionOutcome": {
+        "type": "object",
+        "required": [
+          "interaction_id",
+          "type",
+          "outcome",
+          "reason",
+          "result",
+          "xp_awarded",
+          "progress"
+        ],
+        "properties": {
+          "interaction_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "type": {
+            "enum": [
+              "ENTER_ZONE",
+              "LEAVE_ZONE",
+              "OPEN_DOOR",
+              "CLOSE_DOOR",
+              "USE_WORKSTATION",
+              "TALK_TO_NPC",
+              "INSPECT_OBJECT",
+              "ACCESS_TERMINAL",
+              "READ_DOCUMENT",
+              "START_ENGAGEMENT"
+            ]
+          },
+          "outcome": {
+            "enum": [
+              "allowed",
+              "denied"
+            ]
+          },
+          "reason": {
+            "description": "Set when denied.",
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "enum": [
+                  "ZONE_LOCKED",
+                  "INSUFFICIENT_RANK",
+                  "PARENT_ZONE_LOCKED",
+                  "UNKNOWN_ZONE",
+                  "NOT_IN_ZONE",
+                  "INTERACTION_NOT_SUPPORTED",
+                  "NPC_UNAVAILABLE",
+                  "REQUIRES_ENGAGEMENT"
+                ]
+              }
+            ]
+          },
+          "message": {
+            "type": "string",
+            "description": "Human-readable denial message."
+          },
+          "result": {
+            "description": "Type-specific payload when allowed (zone, leads_to, object/asset/discovery, document content, NPC greeting); null when denied.",
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "xp_awarded": {
+            "type": "integer"
+          },
+          "progress": {
+            "type": "object",
+            "required": [
+              "xp",
+              "level",
+              "level_up",
+              "current_zone",
+              "newly_accessible_zones"
+            ],
+            "properties": {
+              "xp": {
+                "type": "integer"
+              },
+              "level": {
+                "$ref": "#/components/schemas/CareerLevel"
+              },
+              "level_up": {
+                "type": "boolean"
+              },
+              "current_zone": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "type": "object",
+                    "required": [
+                      "id",
+                      "code",
+                      "name"
+                    ],
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "format": "uuid"
+                      },
+                      "code": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                ]
+              },
+              "newly_accessible_zones": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
           }
         }
       }

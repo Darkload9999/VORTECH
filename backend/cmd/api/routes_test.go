@@ -18,10 +18,12 @@ import (
 	"github.com/Darkload9999/VORTECH/backend/internal/audit"
 	"github.com/Darkload9999/VORTECH/backend/internal/auth"
 	"github.com/Darkload9999/VORTECH/backend/internal/auth/authtest"
+	"github.com/Darkload9999/VORTECH/backend/internal/career"
 	"github.com/Darkload9999/VORTECH/backend/internal/company"
 	"github.com/Darkload9999/VORTECH/backend/internal/config"
 	"github.com/Darkload9999/VORTECH/backend/internal/employee"
 	"github.com/Darkload9999/VORTECH/backend/internal/health"
+	"github.com/Darkload9999/VORTECH/backend/internal/interaction"
 	"github.com/Darkload9999/VORTECH/backend/internal/player"
 	"github.com/Darkload9999/VORTECH/backend/internal/requestid"
 	"github.com/Darkload9999/VORTECH/backend/internal/world"
@@ -77,10 +79,12 @@ func newTestHandler(t *testing.T, dbErr error) (http.Handler, *health.Service) {
 		players: player.NewHandler(nil, log),
 		// World handlers are only reached with a valid token; route-level
 		// tests never get that far, so they need no database.
-		companies: company.NewHandler(nil, nil, log),
-		employees: employee.NewHandler(nil, nil, log),
-		assets:    asset.NewHandler(nil, nil, log),
-		world:     world.NewHandler(nil, nil, log),
+		companies:    company.NewHandler(nil, nil, log),
+		employees:    employee.NewHandler(nil, nil, log),
+		assets:       asset.NewHandler(nil, nil, log),
+		world:        world.NewHandler(nil, nil, nil, log),
+		progress:     career.NewHandler(nil, nil, nil, log),
+		interactions: interaction.NewHandler(nil, nil, log),
 	})
 	return h, hs
 }
@@ -161,6 +165,8 @@ func TestUnknownRoutesUseErrorFormat(t *testing.T) {
 // so the test below proves it is not reachable anonymously.
 var protectedRoutes = []struct{ method, path string }{
 	{http.MethodGet, "/api/v1/me"},
+	{http.MethodGet, "/api/v1/me/progress"},
+	{http.MethodPost, "/api/v1/interactions"},
 	{http.MethodGet, "/api/v1/company"},
 	{http.MethodGet, "/api/v1/company/departments"},
 	{http.MethodGet, "/api/v1/employees"},
@@ -243,15 +249,17 @@ func TestMeRequiresAPlatformRole(t *testing.T) {
 	iss := authtest.NewIssuer(t)
 	log := slog.New(slog.DiscardHandler)
 	h := newHandler(deps{
-		cfg:       testConfig(t),
-		log:       log,
-		health:    health.New(log, time.Second, 0),
-		authn:     newTestAuthenticator(t, iss),
-		players:   player.NewHandler(nil, log),
-		companies: company.NewHandler(nil, nil, log),
-		employees: employee.NewHandler(nil, nil, log),
-		assets:    asset.NewHandler(nil, nil, log),
-		world:     world.NewHandler(nil, nil, log),
+		cfg:          testConfig(t),
+		log:          log,
+		health:       health.New(log, time.Second, 0),
+		authn:        newTestAuthenticator(t, iss),
+		players:      player.NewHandler(nil, log),
+		companies:    company.NewHandler(nil, nil, log),
+		employees:    employee.NewHandler(nil, nil, log),
+		assets:       asset.NewHandler(nil, nil, log),
+		world:        world.NewHandler(nil, nil, nil, log),
+		progress:     career.NewHandler(nil, nil, nil, log),
+		interactions: interaction.NewHandler(nil, nil, log),
 	})
 
 	// A Keycloak account holding none of the platform roles is
