@@ -26,8 +26,9 @@ module boundaries, no microservices.
 | 3a | Scenario-as-code (JSON Schema + importer), NEXORA seed, company/employee/asset/world APIs, digital-twin graph | **done** |
 | 3b | Server-validated interactions, career levels, XP and discoveries, zone access and unlocks, `/me/progress` | **done** |
 | 4 | Real-time: event bus, ticket-authenticated WebSocket gateway, notifications, world announcements | **done** |
-| 5 | Range management: range model, lifecycle state machine, job worker, capacity manager, K3s namespaces/quotas/network policies, reconciliation | next |
-| 6–9 | Terminal, telemetry, storage/observability, infrastructure | planned |
+| 5 | Range management: range templates, lifecycle state machine, durable job queue, capacity scheduler, hardened K3s namespaces (Pod Security, quotas, default-deny network policies), expiry, reconciliation, confined worker identity | **done** |
+| 6 | Terminal gateway (xterm.js ↔ range workstation) | next |
+| 7–9 | Telemetry, storage/observability, infrastructure | planned |
 
 ## Requirements
 
@@ -44,6 +45,13 @@ make env              # create .env from .env.example
 make deps-up          # PostgreSQL 18 (127.0.0.1:55432) + Keycloak 26 (127.0.0.1:8180/auth)
 make seed             # validate + import + activate the NEXORA world
 make run-api          # applies migrations (development) and serves on HTTP_ADDR
+```
+
+Ranges need a Kubernetes cluster. Locally, k3d runs K3s in Docker:
+
+```bash
+make cluster-up       # k3d cluster + worker RBAC/admission policy + kubeconfigs (gitignored)
+make run-worker       # provisions ranges with the worker's confined service account
 ```
 
 ```bash
@@ -70,7 +78,9 @@ Run `make help` for the full list. The important ones:
 |---|---|
 | `make check` | gofmt check, vet, staticcheck, unit tests (race), sqlc staleness check |
 | `make test` | Unit tests with the race detector |
-| `make test-integration` | Integration + end-to-end auth tests against compose PostgreSQL and Keycloak (`make deps-up` first) |
+| `make test-integration` | Integration + end-to-end auth tests against compose PostgreSQL and Keycloak (`make deps-up` first); real-K3s range tests too after `make cluster-up` |
+| `make cluster-up` / `cluster-down` | Create / delete the local k3d cluster (RBAC, admission policy, kubeconfigs) |
+| `make cluster-ranges` | List range namespaces in the local cluster |
 | `make vuln` | govulncheck |
 | `make build` | Build `bin/api`, `bin/worker`, `bin/migrate` |
 | `make docker-build` | Versioned container image `vortech/backend:<git describe>` |
@@ -87,7 +97,7 @@ Run `make help` for the full list. The important ones:
 ```
 cmd/
   api/          composition root for HTTP routes + main
-  worker/       background worker main (job handlers arrive in phase 5)
+  worker/       background worker: job runner + range controller loops
   migrate/      schema migration CLI
   scenario/     scenario-as-code validate/import CLI
 internal/
@@ -113,16 +123,20 @@ internal/
   event/        in-process event bus (Publisher/Subscriber interfaces; NATS-replaceable)
   websocket/    ticket-authenticated WebSocket gateway: topics, heartbeats, limits, backpressure
   notification/ durable per-user notifications and REST API
+  jobs/         durable job queue: transactional enqueue, SKIP LOCKED leases, retries, runner
+  cyberrange/   range specs, state machine, capacity, player API (no Kubernetes imports)
+    kube/       manifest rendering + client-go cluster operations (worker only)
+    controller/ admission, provisioning, teardown, expiry, reconciliation (worker only)
   buildinfo/    version metadata injected via -ldflags
   department/ npc/
-  interaction/ engagement/ career/ event/ websocket/ terminal/
-  cyberrange/ telemetry/ notification/ storage/ cache/
+  engagement/ terminal/ telemetry/ storage/ cache/
                 domain modules; each doc.go states its boundary and phase
 api/            openapi.json (served at /api/v1/openapi.json, checked by tests)
 migrations/     goose SQL migrations, embedded into every binary
 queries/        sqlc query definitions
 configs/        non-secret configuration templates (later phases)
-deployments/    local/compose.yaml, local/keycloak/ (dev realm import, DB bootstrap)
+deployments/    local/compose.yaml, local/keycloak/ (dev realm import, DB bootstrap),
+                k3s/ (worker RBAC + ValidatingAdmissionPolicy)
 tests/          integration tests (build tag `integration`)
 ```
 
@@ -429,6 +443,7 @@ REST interaction ──▶ transaction commits ──▶ event bus ──▶ Web
 | `career.level_up` | private |
 | `notification.created` | private |
 | `world.announcement` | world (admin broadcast via `POST /api/v1/admin/announcements`, audited) |
+| `range.requested` … `range.destroyed` | private (one event per lifecycle state; see [Cyber ranges](#cyber-ranges)) |
 
 **Delivery** is at-most-once and happens only **after commit**, so clients never
 see state that later rolls back. Notifications (for example "Promoted to
@@ -453,6 +468,98 @@ catch up with `GET /api/v1/notifications`, then mark them with
   keeps a connection alive past short server timeouts.
 - The bus and ticket store are in-process and move to NATS and Valkey when the
   API scales out. Business code depends only on the interfaces.
+- Other processes reach the bus through PostgreSQL: they `pg_notify` events in
+  the transaction that produced them, and the API's LISTEN bridge republishes
+  them. The worker's range events travel this way.
+
+## Cyber ranges
+
+A range is one player's isolated copy of part of NEXORA's infrastructure: a
+Kubernetes namespace with an analyst workstation and real services (nginx,
+an application, PostgreSQL, Gitea). Templates are scenario-as-code
+(`scenarios/nexora/ranges.yaml`), validated at import: pinned images (no
+`:latest`), non-root UIDs, ports ≥ 1024, exactly one terminal workload, and
+network rules that reference declared ports.
+
+| Method | Path | |
+|---|---|---|
+| `GET` | `/api/v1/range-templates` | Templates of the active scenario |
+| `POST` | `/api/v1/ranges` `{"template":"nexora-web-basics"}` | 202 + `Location`; 409 `RANGE_LIMIT_REACHED` if the player already has a live range |
+| `GET` | `/api/v1/ranges`, `/api/v1/ranges/{id}` | Own ranges (others are 404) |
+| `DELETE` | `/api/v1/ranges/{id}` | 202; idempotent teardown |
+
+**Lifecycle.** The API never talks to Kubernetes. It records intent and a job
+in one transaction; the worker does the rest:
+
+```
+REQUESTED ─▶ (QUEUED) ─▶ PROVISIONING ─▶ STARTING ─▶ READY ─▶ ACTIVE
+    any live state ─▶ STOPPING ─▶ DESTROYED     FAILED / EXPIRED ─▶ STOPPING (automatic)
+```
+
+Every change is a compare-and-set update plus a `range_state_transitions` row,
+a `range.<state>` event and, for READY/FAILED/EXPIRED, a durable
+notification. Concurrent actors (API, several workers, loops) therefore
+never overwrite each other. The database enforces one live range per
+player with a partial unique index.
+
+**Job queue** (`internal/jobs`). Jobs are rows enqueued in the caller's
+transaction, so a job exists exactly when its cause committed.
+- Workers claim them with `FOR UPDATE SKIP LOCKED` under a lease that a
+  heartbeat extends. A crashed worker's job is reclaimed when the lease ends,
+  so handlers are idempotent.
+- Failures retry with exponential backoff and jitter. Permanent errors fail at
+  once.
+- `NOTIFY` wakes workers immediately. Retries sleep only until they are due.
+- On shutdown, in-flight jobs get a grace period and are then handed back
+  without consuming an attempt.
+
+**Capacity.** Ranges reserve their full limits (requests = limits):
+
+```
+available = (cluster − platform reserve) × (100 − headroom)%
+```
+
+The defaults fit the 8 vCPU / 32 GB VPS: 3 vCPU / 12 GiB reserved, 10%
+headroom, which allows about four corporate-network ranges at once.
+- Admission runs under an advisory lock and is strictly first come, first
+  served, so large ranges are never starved.
+- A range that could never fit fails immediately.
+- Destroying a range frees its capacity and admits the next one.
+
+**Isolation** (per range namespace, verified against a real K3s cluster by
+`TestRangeOnRealCluster`):
+- **Pod Security:** `restricted` is enforced on the namespace.
+- **Workload hardening:** non-root UIDs, no privilege escalation, all
+  capabilities dropped, RuntimeDefault seccomp, read-only root filesystem with
+  size-limited `emptyDir` writable paths, no service-account token, no service
+  links.
+- **Network:** a default-deny NetworkPolicy allows only DNS plus the
+  template's workload-to-workload rules. There is no internet, no Kubernetes
+  API, and no route to other players' ranges.
+- **Quota:** a ResourceQuota and LimitRange cap CPU, memory, ephemeral storage
+  and pods, and forbid PVCs, NodePorts and LoadBalancers.
+- **Secrets:** per-range secrets (`secret:<key>` in templates) are generated by
+  the worker and exist only in a Kubernetes Secret.
+
+**Worker identity** (`deployments/k3s/`). Range namespaces are dynamic, so the
+worker has a ClusterRole, but it is narrow:
+- It can create Secrets but never read them.
+- A `ValidatingAdmissionPolicy` confines every write to `range-*` namespaces
+  labelled `vortech.io/managed-by=vortech` that enforce Pod Security
+  `restricted`.
+
+`TestWorkerIdentityIsConfined` proves the worker cannot touch `default` or
+`kube-system`, relabel namespaces, or create a privileged range namespace.
+
+**Expiry and reconciliation.** Ranges expire `ttl` after READY. The worker
+reconciles the cluster against the database every minute:
+- An orphan namespace (no live range) is deleted, or quarantined (labelled and
+  scaled to zero) when `RANGE_ORPHAN_POLICY=quarantine`.
+- A live range whose namespace vanished is failed and cleaned up.
+- A range stuck without a pending job (its job gave up) is re-driven.
+
+All of these actions are audited. Player-facing failure reasons never contain
+cluster details; those go to the job's `last_error` and the audit log.
 
 ## Configuration
 
@@ -492,7 +599,9 @@ On SIGTERM/SIGINT the process:
 
 A second signal terminates immediately. In Kubernetes, set
 `terminationGracePeriodSeconds` above `SHUTDOWN_DRAIN_DELAY + SHUTDOWN_TIMEOUT`.
-Restarting the API never destroys ranges (phase 5 adds reconciliation).
+Restarting the API or the worker never destroys ranges: state lives in
+PostgreSQL and Kubernetes, interrupted jobs are released or reclaimed, and
+reconciliation repairs drift.
 
 ## Container image
 
@@ -513,3 +622,13 @@ Integration tests create a uniquely named database for each run (through
 cover migration up/down reversibility, concurrent migrators, sqlc queries and
 keyset pagination, audit-log immutability and constraints, statement timeouts,
 and readiness against a real database.
+
+With `make cluster-up` done, the same target also runs the real-K3s tests:
+- they provision NEXORA ranges and exec into them to prove that declared flows
+  work while undeclared ones, the internet, the Kubernetes API and other
+  ranges are blocked;
+- they run as the worker's service account to prove its confinement.
+
+They skip when `TEST_KUBECONFIG` / `TEST_WORKER_KUBECONFIG` are unset (as in
+CI). The range lifecycle, admission, expiry, reconciliation and job-queue
+tests run everywhere, against PostgreSQL with an in-memory cluster.
