@@ -74,6 +74,17 @@ func TestEveryRoleCanReadTheWorld(t *testing.T) {
 	}
 }
 
+func TestOnlyStaffInspectLockedZones(t *testing.T) {
+	if auth.ParseRoles([]string{"PLAYER"}).Can(auth.PermWorldInspectLocked) {
+		t.Fatal("players must not inspect zones they have not unlocked")
+	}
+	for _, r := range []string{"INSTRUCTOR", "SCENARIO_CREATOR", "ADMIN"} {
+		if !auth.ParseRoles([]string{r}).Can(auth.PermWorldInspectLocked) {
+			t.Errorf("%s must inspect locked zones", r)
+		}
+	}
+}
+
 func TestNoRolesNoPermissions(t *testing.T) {
 	rs := auth.ParseRoles([]string{"offline_access", "uma_authorization"})
 	if len(rs.Permissions()) != 0 || rs.Can(auth.PermProfileReadOwn) {

@@ -14,12 +14,14 @@ import (
 	"github.com/Darkload9999/VORTECH/backend/internal/audit"
 	"github.com/Darkload9999/VORTECH/backend/internal/auth"
 	"github.com/Darkload9999/VORTECH/backend/internal/buildinfo"
+	"github.com/Darkload9999/VORTECH/backend/internal/career"
 	"github.com/Darkload9999/VORTECH/backend/internal/company"
 	"github.com/Darkload9999/VORTECH/backend/internal/config"
 	"github.com/Darkload9999/VORTECH/backend/internal/database"
 	"github.com/Darkload9999/VORTECH/backend/internal/database/db"
 	"github.com/Darkload9999/VORTECH/backend/internal/employee"
 	"github.com/Darkload9999/VORTECH/backend/internal/health"
+	"github.com/Darkload9999/VORTECH/backend/internal/interaction"
 	"github.com/Darkload9999/VORTECH/backend/internal/logging"
 	"github.com/Darkload9999/VORTECH/backend/internal/player"
 	"github.com/Darkload9999/VORTECH/backend/internal/server"
@@ -109,6 +111,8 @@ func run() error {
 	// The active world changes only when a scenario is activated; a short
 	// cache avoids a lookup on every request.
 	companies := company.NewDirectory(queries, 10*time.Second)
+	careers := career.NewService(queries)
+	interactions := interaction.NewService(pool, companies, careers)
 	handler := newHandler(deps{
 		cfg:       cfg,
 		log:       log,
@@ -118,7 +122,10 @@ func run() error {
 		companies: company.NewHandler(companies, queries, log),
 		employees: employee.NewHandler(companies, queries, log),
 		assets:    asset.NewHandler(companies, queries, log),
-		world:     world.NewHandler(companies, queries, log),
+		world:     world.NewHandler(companies, queries, careers, log),
+		progress:  career.NewHandler(careers, companies, queries, log),
+		// 10 interactions/s sustained per player, bursts of 20.
+		interactions: interaction.NewHandler(interactions, interaction.NewLimiter(10, 20), log),
 	})
 	srv := server.New(cfg.HTTP.Addr, handler, cfg.HTTP, log)
 
