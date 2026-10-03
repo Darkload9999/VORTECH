@@ -17,6 +17,7 @@ import (
 	"github.com/Darkload9999/VORTECH/backend/internal/career"
 	"github.com/Darkload9999/VORTECH/backend/internal/company"
 	"github.com/Darkload9999/VORTECH/backend/internal/config"
+	"github.com/Darkload9999/VORTECH/backend/internal/cyberrange"
 	"github.com/Darkload9999/VORTECH/backend/internal/database"
 	"github.com/Darkload9999/VORTECH/backend/internal/database/db"
 	"github.com/Darkload9999/VORTECH/backend/internal/employee"
@@ -128,6 +129,11 @@ func run() error {
 	gateway := websocket.NewGateway(rtCfg, websocket.NewTicketStore(rtCfg.TicketTTL),
 		websocket.WorldAuthorizer{Dir: companies, Q: queries, Access: careers}, bus, log)
 	unsubscribe := bus.Subscribe("websocket-gateway", func(e event.Event) bool { return e.Topic != "" }, gateway.Deliver)
+	// Events from other processes (the worker's range lifecycle) and from
+	// transactions that notify through PostgreSQL join the bus here.
+	bridgeCtx, stopBridge := context.WithCancel(context.WithoutCancel(ctx))
+	bridgeDone := make(chan struct{})
+	go func() { defer close(bridgeDone); event.Bridge(bridgeCtx, pool, log, bus) }()
 
 	interactions := interaction.NewService(pool, companies, careers, bus)
 	handler := newHandler(deps{
@@ -146,6 +152,7 @@ func run() error {
 		notifications: notification.NewHandler(queries, log),
 		announcer:     world.NewAnnouncer(companies, bus, auditRec, log),
 		gateway:       gateway,
+		ranges:        cyberrange.NewHandler(cyberrange.NewService(pool), log),
 	})
 	srv := server.New(cfg.HTTP.Addr, handler, cfg.HTTP, log)
 
@@ -166,6 +173,8 @@ func run() error {
 	if werr := gateway.Wait(waitCtx); werr != nil {
 		log.Warn("websocket handlers still running at shutdown", "error", werr)
 	}
+	stopBridge()
+	<-bridgeDone
 	unsubscribe()
 	if berr := bus.Close(waitCtx); berr != nil {
 		log.Warn("event bus did not stop cleanly", "error", berr)

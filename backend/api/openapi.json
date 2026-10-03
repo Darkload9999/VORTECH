@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "VORTECH Platform API",
-    "version": "0.5.0",
+    "version": "0.6.0",
     "description": "Authoritative control plane for the VORTECH cybersecurity simulation platform. Access tokens are obtained from Keycloak with the Authorization Code + PKCE (S256) flow by the browser and sent as `Authorization: Bearer <token>`. The API never accepts passwords and never accepts tokens from query strings or cookies."
   },
   "servers": [
@@ -38,6 +38,10 @@
     {
       "name": "realtime",
       "description": "WebSocket gateway, tickets and notifications"
+    },
+    {
+      "name": "ranges",
+      "description": "Per-player isolated cyber ranges. Provisioning is asynchronous: requests return 202 and progress arrives as range.* events on the player's WebSocket topic (range.requested, range.queued, range.provisioning, range.starting, range.ready, range.failed, range.expired, range.stopping, range.destroyed)."
     }
   ],
   "paths": {
@@ -1411,6 +1415,336 @@
           },
           "503": {
             "$ref": "#/components/responses/WorldNotActive"
+          }
+        }
+      }
+    },
+    "/api/v1/range-templates": {
+      "get": {
+        "tags": [
+          "ranges"
+        ],
+        "summary": "Range templates of the active scenario",
+        "operationId": "listRangeTemplates",
+        "security": [
+          {
+            "keycloak": []
+          }
+        ],
+        "x-required-permission": "range:use:own",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/RangeTemplate"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
+    "/api/v1/ranges": {
+      "post": {
+        "tags": [
+          "ranges"
+        ],
+        "summary": "Request a range",
+        "operationId": "createRange",
+        "description": "Records a REQUESTED range and returns immediately; the worker admits it when capacity allows (FIFO), then provisions it. Watch range.* WebSocket events or poll GET /api/v1/ranges/{id}.",
+        "security": [
+          {
+            "keycloak": []
+          }
+        ],
+        "x-required-permission": "range:use:own",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "template"
+                ],
+                "properties": {
+                  "template": {
+                    "type": "string",
+                    "description": "Range template slug"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Accepted",
+            "headers": {
+              "Location": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data"
+                  ],
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/Range"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "description": "RANGE_LIMIT_REACHED: the player already has a live range.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "UNKNOWN_RANGE_TEMPLATE.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "ranges"
+        ],
+        "summary": "The caller's ranges",
+        "operationId": "listRanges",
+        "description": "Newest first, keyset-paginated.",
+        "security": [
+          {
+            "keycloak": []
+          }
+        ],
+        "x-required-permission": "range:use:own",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "meta"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Range"
+                      }
+                    },
+                    "meta": {
+                      "$ref": "#/components/schemas/PageMeta"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
+    "/api/v1/ranges/{id}": {
+      "get": {
+        "tags": [
+          "ranges"
+        ],
+        "summary": "One range",
+        "operationId": "getRange",
+        "description": "Players see only their own ranges (others are 404); administrators see all.",
+        "security": [
+          {
+            "keycloak": []
+          }
+        ],
+        "x-required-permission": "range:use:own",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data"
+                  ],
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/Range"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "ranges"
+        ],
+        "summary": "Destroy a range",
+        "operationId": "destroyRange",
+        "description": "Moves the range to STOPPING and queues teardown of its namespace. Idempotent: a range already stopping or destroyed is returned unchanged.",
+        "security": [
+          {
+            "keycloak": []
+          }
+        ],
+        "x-required-permission": "range:use:own",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Accepted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data"
+                  ],
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/Range"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "RANGE_NOT_STOPPABLE.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           }
         }
       }
@@ -3514,6 +3848,159 @@
             "format": "date-time"
           },
           "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "RangeResources": {
+        "type": "object",
+        "required": [
+          "cpu_millis",
+          "memory_mib",
+          "storage_mib"
+        ],
+        "properties": {
+          "cpu_millis": {
+            "type": "integer"
+          },
+          "memory_mib": {
+            "type": "integer"
+          },
+          "storage_mib": {
+            "type": "integer"
+          }
+        }
+      },
+      "RangeState": {
+        "enum": [
+          "REQUESTED",
+          "QUEUED",
+          "PROVISIONING",
+          "STARTING",
+          "READY",
+          "ACTIVE",
+          "STOPPING",
+          "DESTROYED",
+          "FAILED",
+          "EXPIRED"
+        ],
+        "description": "REQUESTED → (QUEUED) → PROVISIONING → STARTING → READY → ACTIVE; any live state → STOPPING → DESTROYED. FAILED and EXPIRED are followed by automatic cleanup (STOPPING → DESTROYED). A player has at most one range in REQUESTED…ACTIVE."
+      },
+      "RangeTemplate": {
+        "type": "object",
+        "required": [
+          "slug",
+          "name",
+          "description",
+          "ttl_seconds",
+          "resources",
+          "workloads",
+          "terminal"
+        ],
+        "properties": {
+          "slug": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "ttl_seconds": {
+            "type": "integer",
+            "description": "Lifetime once READY; the range then expires and is destroyed."
+          },
+          "resources": {
+            "$ref": "#/components/schemas/RangeResources"
+          },
+          "workloads": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Hostnames reachable inside the range (subject to its network rules)."
+          },
+          "terminal": {
+            "type": "string",
+            "description": "The workload the player gets a shell in."
+          }
+        }
+      },
+      "Range": {
+        "type": "object",
+        "required": [
+          "id",
+          "template",
+          "state",
+          "resources",
+          "failure_reason",
+          "expires_at",
+          "ready_at",
+          "destroyed_at",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "template": {
+            "type": "object",
+            "required": [
+              "slug",
+              "name"
+            ],
+            "properties": {
+              "slug": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              }
+            }
+          },
+          "state": {
+            "$ref": "#/components/schemas/RangeState"
+          },
+          "resources": {
+            "$ref": "#/components/schemas/RangeResources"
+          },
+          "failure_reason": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Player-facing reason when FAILED; never contains infrastructure details."
+          },
+          "expires_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "ready_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "destroyed_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
             "type": "string",
             "format": "date-time"
           }

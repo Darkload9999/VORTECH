@@ -21,6 +21,7 @@ import (
 	"github.com/Darkload9999/VORTECH/backend/internal/career"
 	"github.com/Darkload9999/VORTECH/backend/internal/company"
 	"github.com/Darkload9999/VORTECH/backend/internal/config"
+	"github.com/Darkload9999/VORTECH/backend/internal/cyberrange"
 	"github.com/Darkload9999/VORTECH/backend/internal/employee"
 	"github.com/Darkload9999/VORTECH/backend/internal/health"
 	"github.com/Darkload9999/VORTECH/backend/internal/interaction"
@@ -90,6 +91,7 @@ func newTestHandler(t *testing.T, dbErr error) (http.Handler, *health.Service) {
 		notifications: notification.NewHandler(nil, log),
 		announcer:     world.NewAnnouncer(nil, nil, nil, log),
 		gateway:       testGateway(),
+		ranges:        cyberrange.NewHandler(nil, log),
 	})
 	return h, hs
 }
@@ -187,6 +189,11 @@ var protectedRoutes = []struct{ method, path string }{
 	{http.MethodGet, "/api/v1/world"},
 	{http.MethodGet, "/api/v1/world/zones/{id}"},
 	{http.MethodGet, "/api/v1/world/objects/{key}"},
+	{http.MethodGet, "/api/v1/range-templates"},
+	{http.MethodPost, "/api/v1/ranges"},
+	{http.MethodGet, "/api/v1/ranges"},
+	{http.MethodGet, "/api/v1/ranges/{id}"},
+	{http.MethodDelete, "/api/v1/ranges/{id}"},
 }
 
 // concrete fills path wildcards with plausible values for requests.
@@ -274,6 +281,7 @@ func TestMeRequiresAPlatformRole(t *testing.T) {
 		notifications: notification.NewHandler(nil, log),
 		announcer:     world.NewAnnouncer(nil, nil, nil, log),
 		gateway:       testGateway(),
+		ranges:        cyberrange.NewHandler(nil, log),
 	})
 
 	// A Keycloak account holding none of the platform roles is
