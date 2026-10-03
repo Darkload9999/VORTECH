@@ -16,6 +16,7 @@ type Querier interface {
 	// import without tripping the per-company unique indexes.
 	ClearAssetAddresses(ctx context.Context, companyID uuid.UUID) error
 	CountDiscoveries(ctx context.Context, arg CountDiscoveriesParams) (int32, error)
+	CountUnreadNotifications(ctx context.Context, userID uuid.UUID) (int32, error)
 	DeactivateOtherScenarios(ctx context.Context, id uuid.UUID) error
 	DeleteCompanyRelationships(ctx context.Context, companyID uuid.UUID) error
 	DeleteCompanySchedules(ctx context.Context, companyID uuid.UUID) error
@@ -51,6 +52,7 @@ type Querier interface {
 	// Returns no rows if the player already discovered the asset.
 	InsertDiscovery(ctx context.Context, arg InsertDiscoveryParams) (uuid.UUID, error)
 	InsertInteraction(ctx context.Context, arg InsertInteractionParams) (InsertInteractionRow, error)
+	InsertNotification(ctx context.Context, arg InsertNotificationParams) (InsertNotificationRow, error)
 	// Returns the new player's id, or no rows if the user already has one.
 	InsertPlayerIfMissing(ctx context.Context, arg InsertPlayerIfMissingParams) (uuid.UUID, error)
 	InsertRelationship(ctx context.Context, arg InsertRelationshipParams) error
@@ -76,6 +78,8 @@ type Querier interface {
 	ListGraphAssets(ctx context.Context, companyID uuid.UUID) ([]ListGraphAssetsRow, error)
 	ListGraphEmployees(ctx context.Context, companyID uuid.UUID) ([]ListGraphEmployeesRow, error)
 	ListGraphIdentities(ctx context.Context, companyID uuid.UUID) ([]ListGraphIdentitiesRow, error)
+	// Newest first; pass the last id of the previous page as before_id.
+	ListNotifications(ctx context.Context, arg ListNotificationsParams) ([]ListNotificationsRow, error)
 	// NPCs whose home location is in the zone. The living-company scheduler
 	// will move them during the day in a later phase.
 	ListZoneEmployees(ctx context.Context, arg ListZoneEmployeesParams) ([]ListZoneEmployeesRow, error)
@@ -88,6 +92,9 @@ type Querier interface {
 	LockPlayerProgress(ctx context.Context, playerID uuid.UUID) (LockPlayerProgressRow, error)
 	// Serialises concurrent imports of the same scenario for the transaction.
 	LockScenarioImport(ctx context.Context, slug string) error
+	MarkAllNotificationsRead(ctx context.Context, userID uuid.UUID) (int64, error)
+	// Scoped by user: a user can never mark someone else's notification.
+	MarkNotificationRead(ctx context.Context, arg MarkNotificationReadParams) (MarkNotificationReadRow, error)
 	PublishAndActivateScenario(ctx context.Context, id uuid.UUID) error
 	SetCurrentZone(ctx context.Context, arg SetCurrentZoneParams) error
 	SetDepartmentLinks(ctx context.Context, arg SetDepartmentLinksParams) error

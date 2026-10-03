@@ -180,6 +180,17 @@ type Location struct {
 	UpdatedAt    time.Time
 }
 
+type Notification struct {
+	ID        uuid.UUID
+	UserID    uuid.UUID
+	Type      string
+	Title     string
+	Body      string
+	Data      []byte
+	ReadAt    *time.Time
+	CreatedAt time.Time
+}
+
 type Player struct {
 	ID          uuid.UUID
 	UserID      uuid.UUID
