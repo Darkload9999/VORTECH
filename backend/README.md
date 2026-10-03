@@ -24,8 +24,9 @@ module boundaries, no microservices.
 | 1 | Foundation: config, logging, PostgreSQL, migrations, sqlc, health, shutdown, Docker, compose | **done** |
 | 2 | Keycloak OIDC/PKCE, JWT validation, player mapping, RBAC, audit, `/me`, OpenAPI | **done** |
 | 3a | Scenario-as-code (JSON Schema + importer), NEXORA seed, company/employee/asset/world APIs, digital-twin graph | **done** |
-| 3b | Interactions (server-validated), player progress, zone unlocks, career levels, `/me/progress` | next |
-| 4–9 | Real-time, ranges, terminal, telemetry, storage/observability, infrastructure | planned |
+| 3b | Server-validated interactions, career levels, XP and discoveries, zone access and unlocks, `/me/progress` | **done** |
+| 4 | Real-time: authenticated WebSocket gateway, internal event bus, notifications, world events | next |
+| 5–9 | Ranges, terminal, telemetry, storage/observability, infrastructure | planned |
 
 ## Requirements
 
@@ -105,7 +106,9 @@ internal/
   company/      active-world resolver, GET /company, /company/departments
   employee/     employee directory (fictional identities, schedules)
   asset/        asset inventory and the digital-twin graph (Cytoscape.js)
-  world/        zones, locations, objects, Three.js object → asset resolution
+  world/        zones, locations, objects, Three.js object → asset resolution, zone access rules
+  career/       career ladder, XP, current zone, zone unlocks, GET /me/progress
+  interaction/  POST /interactions: server-side rules, discoveries, per-player rate limit
   buildinfo/    version metadata injected via -ldflags
   department/ npc/
   interaction/ engagement/ career/ event/ websocket/ terminal/
@@ -206,6 +209,7 @@ the API scales out.
 |---|:-:|:-:|:-:|:-:|
 | `profile:read:own` | ✓ | ✓ | ✓ | ✓ |
 | `world:read` (company, employees, assets, world) | ✓ | ✓ | ✓ | ✓ |
+| `world:inspect:locked` (see zones the caller has not unlocked) | | ✓ | ✓ | ✓ |
 | `scenario:play`, `range:use:own`, `evidence:manage:own` | ✓ | | | |
 | `student:read`, `scenario:assign`, `progress:review` | | ✓ | | ✓ |
 | `scenario:create`, `scenario:edit`, `scenario:publish` | | | ✓ | ✓ |
@@ -323,6 +327,60 @@ HOSTED_ON, …). Without `root` the whole company graph is returned, capped at
 `depth` hops (at most 4).
 
 NPC `persona` text is an authoring note and is never returned by the API.
+
+## Interactions and progression
+
+The browser is never trusted as the authority. The client says *what it wants
+to do*, and `POST /api/v1/interactions` decides from server-side state:
+
+```json
+{ "type": "USE_WORKSTATION", "object_key": "finance_pc_04" }
+```
+
+| Type | Target | Allowed when |
+|---|---|---|
+| `ENTER_ZONE` | `zone_id` | the zone is accessible to the player (sets the authoritative current zone) |
+| `LEAVE_ZONE` | `zone_id` | it is the current zone (the player moves to the parent zone) |
+| `OPEN_DOOR` / `CLOSE_DOOR` | `object_key` | the door is in the current zone and, to open it, its target zone is accessible |
+| `USE_WORKSTATION` / `INSPECT_OBJECT` | `object_key` | the object is in the current zone and offers the action; reveals and **discovers** its asset |
+| `READ_DOCUMENT` | `object_key` | as above; returns the content (never included in zone listings) |
+| `TALK_TO_NPC` | `employee_id` | the NPC is active and present in the current zone; returns the greeting |
+| `ACCESS_TERMINAL` / `START_ENGAGEMENT` | `object_key` | always denied `REQUIRES_ENGAGEMENT` until engagements and ranges exist (phase 5) |
+
+Rule denials are normal gameplay. They return **200** with `outcome: "denied"`
+and a `reason`, one of:
+- `ZONE_LOCKED`, `INSUFFICIENT_RANK`, `PARENT_ZONE_LOCKED`
+- `NOT_IN_ZONE`, `INTERACTION_NOT_SUPPORTED`
+- `NPC_UNAVAILABLE`, `REQUIRES_ENGAGEMENT`
+
+Malformed requests return 400, unknown targets 404, and non-players 403.
+Requests are rate limited per player (10/s, burst 20) with **429** and
+`Retry-After`.
+
+Every attempt is stored in `interactions` with its outcome. Each one runs in a
+transaction that locks the player's progress row, so concurrent requests can't
+double-award XP or race on the current zone. The test suite proves this with
+20 parallel requests.
+
+**Career and access.**
+- **Rank:** derived from XP. The ladder runs INTERN 0 → ANALYST_I 100 →
+  ANALYST_II 300 → SENIOR 700 → LEAD 1500 → PRINCIPAL 3000.
+- **Discoveries:** the first discovery of each asset awards 10 XP.
+  Engagements become the main XP source in phase 5.
+- **Zone access:** a zone is **open by default**, **rank-gated** (it opens
+  automatically at the required rank), or **explicit-only** (unlocked by an
+  engagement, instructor or admin). Explicit unlocks bypass the rank
+  requirement, and the parent zone must always be accessible.
+- **Level-ups:** a level-up reports `newly_accessible_zones`.
+- **Locked contents:** players get `403 ZONE_LOCKED` for the contents of zones
+  they haven't unlocked. Staff with `world:inspect:locked` see everything.
+- **`GET /api/v1/me/progress`** returns XP, level, the next level with the XP
+  remaining, the current zone, unlocks, per-zone access with reasons, and the
+  discovery count.
+- **`GET /api/v1/world`** includes each zone's `access` for players.
+
+Everything is persisted in PostgreSQL (`player_progress`,
+`player_zone_unlocks`, `discoveries`, `interactions`) and survives restarts.
 
 ## Configuration
 
