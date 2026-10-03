@@ -374,6 +374,13 @@ func validateReferences(b *Bundle) []Problem {
 		}
 	}
 
+	c.index("ranges.yaml", "range template", mapCodes(b.RangeTemplates, func(t RangeTemplate) string { return t.Slug }), false)
+	for i, t := range b.RangeTemplates {
+		for _, msg := range t.Spec().Validate(nil) {
+			c.add("ranges.yaml", fmt.Sprintf("/templates/%d (%s)", i, t.Slug), "%s", msg)
+		}
+	}
+
 	sort.SliceStable(c.problems, func(i, j int) bool {
 		if c.problems[i].File != c.problems[j].File {
 			return c.problems[i].File < c.problems[j].File

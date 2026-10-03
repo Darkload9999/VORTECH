@@ -13,6 +13,7 @@
     "assetCode": { "type": "string", "pattern": "^[A-Z][A-Z0-9-]{1,63}$" },
     "username": { "type": "string", "pattern": "^[a-z][a-z0-9._-]{0,63}$" },
     "objectKey": { "type": "string", "pattern": "^[a-z0-9][a-z0-9_.-]{0,127}$" },
+    "workloadName": { "type": "string", "pattern": "^[a-z]([a-z0-9-]{0,30}[a-z0-9])?$" },
     "clock": { "type": "string", "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$" },
     "criticality": { "enum": ["low", "medium", "high", "critical"] },
     "attributes": {
@@ -351,6 +352,84 @@
               "description": { "$ref": "#/$defs/text" },
               "content": { "type": "string", "maxLength": 20000 },
               "attributes": { "$ref": "#/$defs/attributes" }
+            }
+          }
+        }
+      }
+    },
+
+    "ranges": {
+      "description": "ranges.yaml (optional): range templates. Workload specs are checked further by the importer (image pinning, ports, terminal, network references).",
+      "type": "object",
+      "additionalProperties": false,
+      "patternProperties": { "^x-": { "description": "Extension keys (e.g. YAML anchors) are ignored." } },
+      "required": ["templates"],
+      "properties": {
+        "templates": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 50,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["slug", "name", "ttl_minutes", "workloads"],
+            "properties": {
+              "slug": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{1,40}$" },
+              "name": { "$ref": "#/$defs/name" },
+              "description": { "$ref": "#/$defs/text" },
+              "ttl_minutes": { "type": "integer", "minimum": 5, "maximum": 1440 },
+              "workloads": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 20,
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["name", "role", "image", "cpu_millis", "memory_mib", "run_as_user"],
+                  "properties": {
+                    "name": { "$ref": "#/$defs/workloadName" },
+                    "role": { "enum": ["workstation", "web", "app", "database", "git", "bastion", "service"] },
+                    "image": { "type": "string", "minLength": 3, "maxLength": 300 },
+                    "command": { "type": "array", "maxItems": 32, "items": { "type": "string", "maxLength": 1000 } },
+                    "args": { "type": "array", "maxItems": 64, "items": { "type": "string", "maxLength": 1000 } },
+                    "ports": {
+                      "type": "array",
+                      "maxItems": 16,
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": ["name", "port"],
+                        "properties": {
+                          "name": { "type": "string", "maxLength": 15 },
+                          "port": { "type": "integer", "minimum": 1, "maximum": 65535 }
+                        }
+                      }
+                    },
+                    "env": { "type": "object", "maxProperties": 64, "additionalProperties": { "type": "string", "maxLength": 4000 } },
+                    "cpu_millis": { "type": "integer", "minimum": 10, "maximum": 4000 },
+                    "memory_mib": { "type": "integer", "minimum": 16, "maximum": 8192 },
+                    "storage_mib": { "type": "integer", "minimum": 0, "maximum": 10240 },
+                    "run_as_user": { "type": "integer", "minimum": 1, "maximum": 65535 },
+                    "read_only_root": { "type": "boolean" },
+                    "writable_paths": { "type": "array", "maxItems": 16, "items": { "type": "string", "maxLength": 200 } },
+                    "terminal": { "type": "boolean" }
+                  }
+                }
+              },
+              "network": {
+                "type": "array",
+                "maxItems": 200,
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["from", "to"],
+                  "properties": {
+                    "from": { "$ref": "#/$defs/workloadName" },
+                    "to": { "$ref": "#/$defs/workloadName" },
+                    "port": { "type": "integer", "minimum": 1, "maximum": 65535 }
+                  }
+                }
+              }
             }
           }
         }

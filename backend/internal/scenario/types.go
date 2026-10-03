@@ -1,6 +1,10 @@
 package scenario
 
-import "time"
+import (
+	"time"
+
+	"github.com/Darkload9999/VORTECH/backend/internal/cyberrange"
+)
 
 // Bundle is a fully loaded and validated scenario directory. The per-file
 // types carry JSON tags matching the YAML (snake_case) because files are
@@ -18,6 +22,8 @@ type Bundle struct {
 	Assets      []Asset
 	Relations   []Relationship
 	World       World
+	// RangeTemplates come from the optional ranges.yaml.
+	RangeTemplates []RangeTemplate
 }
 
 // Meta is scenario.yaml.
@@ -192,8 +198,26 @@ type (
 	networkFile struct {
 		Networks []Network `json:"networks"`
 	}
+	rangesFile struct {
+		Templates []RangeTemplate `json:"templates"`
+	}
 	assetsFile struct {
 		Assets        []Asset        `json:"assets"`
 		Relationships []Relationship `json:"relationships"`
 	}
 )
+
+// RangeTemplate is one entry of ranges.yaml.
+type RangeTemplate struct {
+	Slug        string                   `json:"slug"`
+	Name        string                   `json:"name"`
+	Description string                   `json:"description"`
+	TTLMinutes  int32                    `json:"ttl_minutes"`
+	Workloads   []cyberrange.Workload    `json:"workloads"`
+	Network     []cyberrange.NetworkRule `json:"network"`
+}
+
+// Spec returns the template's workload specification.
+func (t RangeTemplate) Spec() cyberrange.Spec {
+	return cyberrange.Spec{Workloads: t.Workloads, Network: t.Network}
+}

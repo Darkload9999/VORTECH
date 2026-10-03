@@ -49,6 +49,14 @@ func TestNexoraScenarioIsValid(t *testing.T) {
 	if alex == nil || alex.Identity == nil || alex.Identity.Username != "alex" || alex.Department != "FIN" {
 		t.Fatalf("EMP-0018 does not match the documented example: %+v", alex)
 	}
+	if len(b.RangeTemplates) != 2 {
+		t.Fatalf("range templates = %d, want 2", len(b.RangeTemplates))
+	}
+	for _, rt := range b.RangeTemplates {
+		if ws, ok := rt.Spec().TerminalWorkload(); !ok || ws.Name != "workstation" || len(ws.WritablePaths) != 2 {
+			t.Errorf("%s: YAML anchor workstation not expanded: %+v", rt.Slug, ws)
+		}
+	}
 	if len(alex.Schedule) != 3 {
 		t.Errorf("YAML anchor schedule not expanded: %+v", alex.Schedule)
 	}
