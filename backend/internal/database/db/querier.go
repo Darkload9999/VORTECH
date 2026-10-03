@@ -12,12 +12,23 @@ import (
 
 type Querier interface {
 	AddPlayerXP(ctx context.Context, arg AddPlayerXPParams) (int32, error)
+	// Claims the oldest runnable job of the given kinds: a queued job that is
+	// due, or a running job whose lease expired (its worker died). SKIP LOCKED
+	// lets any number of workers claim concurrently without blocking.
+	ClaimJob(ctx context.Context, arg ClaimJobParams) (ClaimJobRow, error)
 	// Run before upserting so hostnames/IPs can move between assets within one
 	// import without tripping the per-company unique indexes.
 	ClearAssetAddresses(ctx context.Context, companyID uuid.UUID) error
+	CompleteJob(ctx context.Context, arg CompleteJobParams) (int64, error)
 	CountDiscoveries(ctx context.Context, arg CountDiscoveriesParams) (int32, error)
+	CountJobsByState(ctx context.Context) ([]CountJobsByStateRow, error)
+	CountRangesByState(ctx context.Context) ([]CountRangesByStateRow, error)
 	CountUnreadNotifications(ctx context.Context, userID uuid.UUID) (int32, error)
+	CreateRange(ctx context.Context, arg CreateRangeParams) (Range, error)
 	DeactivateOtherScenarios(ctx context.Context, id uuid.UUID) error
+	// Templates removed from the scenario stay for existing ranges but cannot
+	// be used for new ones.
+	DeactivateStaleRangeTemplates(ctx context.Context, arg DeactivateStaleRangeTemplatesParams) (int64, error)
 	DeleteCompanyRelationships(ctx context.Context, companyID uuid.UUID) error
 	DeleteCompanySchedules(ctx context.Context, companyID uuid.UUID) error
 	DeleteStaleAssets(ctx context.Context, arg DeleteStaleAssetsParams) (int64, error)
@@ -27,10 +38,18 @@ type Querier interface {
 	DeleteStaleLocations(ctx context.Context, arg DeleteStaleLocationsParams) (int64, error)
 	DeleteStaleWorldObjects(ctx context.Context, arg DeleteStaleWorldObjectsParams) (int64, error)
 	DeleteStaleZones(ctx context.Context, arg DeleteStaleZonesParams) (int64, error)
+	// Durable job queue (see internal/jobs).
+	EnqueueJob(ctx context.Context, arg EnqueueJobParams) (uuid.UUID, error)
 	EnsurePlayerProgress(ctx context.Context, playerID uuid.UUID) error
+	// Heartbeat. Zero rows means the lease was lost (another worker took over).
+	ExtendJobLease(ctx context.Context, arg ExtendJobLeaseParams) (int64, error)
+	// Records a failed attempt: the job is retried after a backoff unless the
+	// error is permanent or attempts are exhausted.
+	FailJob(ctx context.Context, arg FailJobParams) (string, error)
 	// Read side for company, departments and employees. Every query is scoped by
 	// company_id so one company's data never leaks into another world.
 	GetActiveCompany(ctx context.Context) (GetActiveCompanyRow, error)
+	GetActiveRangeTemplateBySlug(ctx context.Context, slug string) (GetActiveRangeTemplateBySlugRow, error)
 	GetAsset(ctx context.Context, arg GetAssetParams) (GetAssetRow, error)
 	GetCompanyIDByScenario(ctx context.Context, scenarioID uuid.UUID) (uuid.UUID, error)
 	GetCompanyStats(ctx context.Context, companyID uuid.UUID) (GetCompanyStatsRow, error)
@@ -39,6 +58,8 @@ type Querier interface {
 	GetInteractionObject(ctx context.Context, arg GetInteractionObjectParams) (GetInteractionObjectRow, error)
 	GetPlayerIDByUserID(ctx context.Context, userID uuid.UUID) (uuid.UUID, error)
 	GetPlayerProgress(ctx context.Context, playerID uuid.UUID) (GetPlayerProgressRow, error)
+	GetRangeTemplate(ctx context.Context, id uuid.UUID) (RangeTemplate, error)
+	GetRangeView(ctx context.Context, id uuid.UUID) (GetRangeViewRow, error)
 	// Write side of the scenario importer. Entities are upserted by natural key
 	// so their IDs survive re-imports; anything no longer present in the
 	// scenario files is pruned with the Delete* queries.
@@ -55,8 +76,10 @@ type Querier interface {
 	InsertNotification(ctx context.Context, arg InsertNotificationParams) (InsertNotificationRow, error)
 	// Returns the new player's id, or no rows if the user already has one.
 	InsertPlayerIfMissing(ctx context.Context, arg InsertPlayerIfMissingParams) (uuid.UUID, error)
+	InsertRangeTransition(ctx context.Context, arg InsertRangeTransitionParams) error
 	InsertRelationship(ctx context.Context, arg InsertRelationshipParams) error
 	InsertSchedule(ctx context.Context, arg InsertScheduleParams) error
+	ListActiveRangeTemplates(ctx context.Context) ([]ListActiveRangeTemplatesRow, error)
 	// Networks the asset is connected to (CONNECTED_TO edges to network assets).
 	ListAssetNetworks(ctx context.Context, arg ListAssetNetworksParams) ([]ListAssetNetworksRow, error)
 	ListAssetWorldObjects(ctx context.Context, arg ListAssetWorldObjectsParams) ([]ListAssetWorldObjectsRow, error)
@@ -75,11 +98,23 @@ type Querier interface {
 	// Keyset pagination on employee_code. search is an ILIKE pattern built and
 	// escaped by the caller.
 	ListEmployees(ctx context.Context, arg ListEmployeesParams) ([]ListEmployeesRow, error)
+	ListExpiredRanges(ctx context.Context, maxRows int32) ([]uuid.UUID, error)
 	ListGraphAssets(ctx context.Context, companyID uuid.UUID) ([]ListGraphAssetsRow, error)
 	ListGraphEmployees(ctx context.Context, companyID uuid.UUID) ([]ListGraphEmployeesRow, error)
 	ListGraphIdentities(ctx context.Context, companyID uuid.UUID) ([]ListGraphIdentitiesRow, error)
 	// Newest first; pass the last id of the previous page as before_id.
 	ListNotifications(ctx context.Context, arg ListNotificationsParams) ([]ListNotificationsRow, error)
+	// Ranges waiting for capacity, first come first served.
+	ListPendingRanges(ctx context.Context, maxRows int32) ([]Range, error)
+	// Newest first; pass the last id of the previous page as before_id.
+	ListPlayerRanges(ctx context.Context, arg ListPlayerRangesParams) ([]ListPlayerRangesRow, error)
+	ListRangeTransitions(ctx context.Context, rangeID uuid.UUID) ([]ListRangeTransitionsRow, error)
+	// Ranges whose namespace may exist in the cluster (reconciliation).
+	ListRangesWithNamespaces(ctx context.Context) ([]ListRangesWithNamespacesRow, error)
+	// Ranges in a state that needs a job, without one queued or running, and
+	// unchanged for longer than stale_seconds (the job failed permanently or
+	// was lost). The reconciler re-drives them.
+	ListStuckRanges(ctx context.Context, arg ListStuckRangesParams) ([]ListStuckRangesRow, error)
 	// NPCs whose home location is in the zone. The living-company scheduler
 	// will move them during the day in a later phase.
 	ListZoneEmployees(ctx context.Context, arg ListZoneEmployeesParams) ([]ListZoneEmployeesRow, error)
@@ -90,22 +125,42 @@ type Querier interface {
 	ListZones(ctx context.Context, companyID uuid.UUID) ([]ListZonesRow, error)
 	// Serialises a player's state changes for the duration of the transaction.
 	LockPlayerProgress(ctx context.Context, playerID uuid.UUID) (LockPlayerProgressRow, error)
+	// Serialises capacity decisions across workers for the transaction.
+	LockRangeAdmission(ctx context.Context) error
 	// Serialises concurrent imports of the same scenario for the transaction.
 	LockScenarioImport(ctx context.Context, slug string) error
 	MarkAllNotificationsRead(ctx context.Context, userID uuid.UUID) (int64, error)
 	// Scoped by user: a user can never mark someone else's notification.
 	MarkNotificationRead(ctx context.Context, arg MarkNotificationReadParams) (MarkNotificationReadRow, error)
+	// Succeeded jobs are kept for a while for operators; failed ones longer.
+	PruneFinishedJobs(ctx context.Context, arg PruneFinishedJobsParams) (int64, error)
 	PublishAndActivateScenario(ctx context.Context, id uuid.UUID) error
+	RangeStatesByID(ctx context.Context, ids []uuid.UUID) ([]RangeStatesByIDRow, error)
+	RecordRangeResources(ctx context.Context, arg RecordRangeResourcesParams) error
+	// Gives an interrupted job back (worker shutdown) without consuming an attempt.
+	ReleaseJob(ctx context.Context, arg ReleaseJobParams) (int64, error)
+	// How long until a job of these kinds becomes claimable (a retry's backoff
+	// ends or a lease expires); -1 when none is pending. Computed by the
+	// database so worker clock skew does not matter.
+	SecondsUntilNextJob(ctx context.Context, kinds []string) (float64, error)
 	SetCurrentZone(ctx context.Context, arg SetCurrentZoneParams) error
 	SetDepartmentLinks(ctx context.Context, arg SetDepartmentLinksParams) error
 	SetEmployeeManager(ctx context.Context, arg SetEmployeeManagerParams) error
 	SetZoneParent(ctx context.Context, arg SetZoneParentParams) error
+	// Resources reserved by ranges in the given (capacity-consuming) states.
+	SumRangeUsage(ctx context.Context, states []string) (SumRangeUsageRow, error)
+	// Compare-and-set state change: it only applies if the range is still in
+	// from_state, so concurrent actors (API, worker, expiry, reconciler) can
+	// never overwrite each other's transitions.
+	TransitionRange(ctx context.Context, arg TransitionRangeParams) (Range, error)
 	UpsertAsset(ctx context.Context, arg UpsertAssetParams) (uuid.UUID, error)
 	UpsertCompany(ctx context.Context, arg UpsertCompanyParams) (uuid.UUID, error)
 	UpsertDepartment(ctx context.Context, arg UpsertDepartmentParams) (uuid.UUID, error)
 	UpsertEmployee(ctx context.Context, arg UpsertEmployeeParams) (uuid.UUID, error)
 	UpsertIdentity(ctx context.Context, arg UpsertIdentityParams) (uuid.UUID, error)
 	UpsertLocation(ctx context.Context, arg UpsertLocationParams) (uuid.UUID, error)
+	// Range templates and per-player cyber ranges (see internal/cyberrange).
+	UpsertRangeTemplate(ctx context.Context, arg UpsertRangeTemplateParams) (uuid.UUID, error)
 	UpsertScenario(ctx context.Context, arg UpsertScenarioParams) (UpsertScenarioRow, error)
 	// Creates the user on first sight and refreshes the mirrored profile
 	// otherwise. The update always runs (last_seen_at changes) so RETURNING

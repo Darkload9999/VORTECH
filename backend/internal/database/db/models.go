@@ -167,6 +167,21 @@ type Interaction struct {
 	CreatedAt       time.Time
 }
 
+type Job struct {
+	ID          uuid.UUID
+	Kind        string
+	Payload     []byte
+	State       string
+	Attempts    int32
+	MaxAttempts int32
+	RunAfter    time.Time
+	LockedBy    *string
+	LockedUntil *time.Time
+	LastError   *string
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+}
+
 type Location struct {
 	ID           uuid.UUID
 	CompanyID    uuid.UUID
@@ -212,6 +227,56 @@ type PlayerZoneUnlock struct {
 	ZoneID     uuid.UUID
 	Source     string
 	UnlockedAt time.Time
+}
+
+type Range struct {
+	ID                  uuid.UUID
+	PlayerID            uuid.UUID
+	TemplateID          uuid.UUID
+	State               string
+	Namespace           string
+	RequestedCpuMillis  int32
+	RequestedMemoryMib  int32
+	RequestedStorageMib int32
+	FailureReason       *string
+	ExpiresAt           *time.Time
+	ReadyAt             *time.Time
+	DestroyedAt         *time.Time
+	CreatedAt           time.Time
+	UpdatedAt           time.Time
+}
+
+type RangeResource struct {
+	RangeID   uuid.UUID
+	Kind      string
+	Name      string
+	CreatedAt time.Time
+}
+
+type RangeStateTransition struct {
+	ID        uuid.UUID
+	RangeID   uuid.UUID
+	FromState *string
+	ToState   string
+	Reason    string
+	Actor     string
+	CreatedAt time.Time
+}
+
+type RangeTemplate struct {
+	ID          uuid.UUID
+	ScenarioID  uuid.UUID
+	Slug        string
+	Name        string
+	Description string
+	TtlSeconds  int32
+	CpuMillis   int32
+	MemoryMib   int32
+	StorageMib  int32
+	Spec        []byte
+	Active      bool
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
 }
 
 type Scenario struct {
