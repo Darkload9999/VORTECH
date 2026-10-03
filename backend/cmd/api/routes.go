@@ -10,6 +10,7 @@ import (
 	"github.com/Darkload9999/VORTECH/backend/internal/career"
 	"github.com/Darkload9999/VORTECH/backend/internal/company"
 	"github.com/Darkload9999/VORTECH/backend/internal/config"
+	"github.com/Darkload9999/VORTECH/backend/internal/cyberrange"
 	"github.com/Darkload9999/VORTECH/backend/internal/employee"
 	"github.com/Darkload9999/VORTECH/backend/internal/health"
 	"github.com/Darkload9999/VORTECH/backend/internal/httpx"
@@ -42,6 +43,7 @@ type deps struct {
 	notifications *notification.Handler
 	announcer     *world.Announcer
 	gateway       *websocket.Gateway
+	ranges        *cyberrange.Handler
 }
 
 // newHandler is the composition root for HTTP routes. Every route except the
@@ -71,6 +73,12 @@ func newHandler(d deps) http.Handler {
 	r.Handle("GET /api/v1/world", protect(auth.PermWorldRead, d.world.World))
 	r.Handle("GET /api/v1/world/zones/{id}", protect(auth.PermWorldRead, d.world.Zone))
 	r.Handle("GET /api/v1/world/objects/{key}", protect(auth.PermWorldRead, d.world.Object))
+
+	r.Handle("GET /api/v1/range-templates", protect(auth.PermRangeUseOwn, d.ranges.Templates))
+	r.Handle("POST /api/v1/ranges", protect(auth.PermRangeUseOwn, d.ranges.Create))
+	r.Handle("GET /api/v1/ranges", protect(auth.PermRangeUseOwn, d.ranges.List))
+	r.Handle("GET /api/v1/ranges/{id}", protect(auth.PermRangeUseOwn, d.ranges.Get))
+	r.Handle("DELETE /api/v1/ranges/{id}", protect(auth.PermRangeUseOwn, d.ranges.Destroy))
 
 	r.Handle("POST /api/v1/ws/tickets", protect(auth.PermProfileReadOwn, d.gateway.IssueTicket))
 	r.Handle("GET /api/v1/notifications", protect(auth.PermProfileReadOwn, d.notifications.List))

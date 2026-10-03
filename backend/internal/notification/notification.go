@@ -22,6 +22,9 @@ import (
 const (
 	TypePromoted     = "career.promoted"
 	TypeZoneUnlocked = "zone.unlocked"
+	TypeRangeReady   = "range.ready"
+	TypeRangeFailed  = "range.failed"
+	TypeRangeExpired = "range.expired"
 )
 
 // Notification is a durable message for one user.
