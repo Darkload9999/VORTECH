@@ -24,8 +24,10 @@ import (
 	"github.com/Darkload9999/VORTECH/backend/internal/employee"
 	"github.com/Darkload9999/VORTECH/backend/internal/health"
 	"github.com/Darkload9999/VORTECH/backend/internal/interaction"
+	"github.com/Darkload9999/VORTECH/backend/internal/notification"
 	"github.com/Darkload9999/VORTECH/backend/internal/player"
 	"github.com/Darkload9999/VORTECH/backend/internal/requestid"
+	"github.com/Darkload9999/VORTECH/backend/internal/websocket"
 	"github.com/Darkload9999/VORTECH/backend/internal/world"
 )
 
@@ -79,12 +81,15 @@ func newTestHandler(t *testing.T, dbErr error) (http.Handler, *health.Service) {
 		players: player.NewHandler(nil, log),
 		// World handlers are only reached with a valid token; route-level
 		// tests never get that far, so they need no database.
-		companies:    company.NewHandler(nil, nil, log),
-		employees:    employee.NewHandler(nil, nil, log),
-		assets:       asset.NewHandler(nil, nil, log),
-		world:        world.NewHandler(nil, nil, nil, log),
-		progress:     career.NewHandler(nil, nil, nil, log),
-		interactions: interaction.NewHandler(nil, nil, log),
+		companies:     company.NewHandler(nil, nil, log),
+		employees:     employee.NewHandler(nil, nil, log),
+		assets:        asset.NewHandler(nil, nil, log),
+		world:         world.NewHandler(nil, nil, nil, log),
+		progress:      career.NewHandler(nil, nil, nil, log),
+		interactions:  interaction.NewHandler(nil, nil, log),
+		notifications: notification.NewHandler(nil, log),
+		announcer:     world.NewAnnouncer(nil, nil, nil, log),
+		gateway:       testGateway(),
 	})
 	return h, hs
 }
@@ -167,6 +172,11 @@ var protectedRoutes = []struct{ method, path string }{
 	{http.MethodGet, "/api/v1/me"},
 	{http.MethodGet, "/api/v1/me/progress"},
 	{http.MethodPost, "/api/v1/interactions"},
+	{http.MethodPost, "/api/v1/ws/tickets"},
+	{http.MethodGet, "/api/v1/notifications"},
+	{http.MethodPost, "/api/v1/notifications/{id}/read"},
+	{http.MethodPost, "/api/v1/notifications/read-all"},
+	{http.MethodPost, "/api/v1/admin/announcements"},
 	{http.MethodGet, "/api/v1/company"},
 	{http.MethodGet, "/api/v1/company/departments"},
 	{http.MethodGet, "/api/v1/employees"},
@@ -200,6 +210,7 @@ var publicRoutes = []struct{ method, path string }{
 	{http.MethodGet, "/api/v1/health"},
 	{http.MethodGet, "/api/v1/ready"},
 	{http.MethodGet, "/api/v1/openapi.json"},
+	{http.MethodGet, "/ws"}, // authenticated by a one-time ticket instead
 }
 
 func TestOpenAPIDocumentsEveryRoute(t *testing.T) {
@@ -249,17 +260,20 @@ func TestMeRequiresAPlatformRole(t *testing.T) {
 	iss := authtest.NewIssuer(t)
 	log := slog.New(slog.DiscardHandler)
 	h := newHandler(deps{
-		cfg:          testConfig(t),
-		log:          log,
-		health:       health.New(log, time.Second, 0),
-		authn:        newTestAuthenticator(t, iss),
-		players:      player.NewHandler(nil, log),
-		companies:    company.NewHandler(nil, nil, log),
-		employees:    employee.NewHandler(nil, nil, log),
-		assets:       asset.NewHandler(nil, nil, log),
-		world:        world.NewHandler(nil, nil, nil, log),
-		progress:     career.NewHandler(nil, nil, nil, log),
-		interactions: interaction.NewHandler(nil, nil, log),
+		cfg:           testConfig(t),
+		log:           log,
+		health:        health.New(log, time.Second, 0),
+		authn:         newTestAuthenticator(t, iss),
+		players:       player.NewHandler(nil, log),
+		companies:     company.NewHandler(nil, nil, log),
+		employees:     employee.NewHandler(nil, nil, log),
+		assets:        asset.NewHandler(nil, nil, log),
+		world:         world.NewHandler(nil, nil, nil, log),
+		progress:      career.NewHandler(nil, nil, nil, log),
+		interactions:  interaction.NewHandler(nil, nil, log),
+		notifications: notification.NewHandler(nil, log),
+		announcer:     world.NewAnnouncer(nil, nil, nil, log),
+		gateway:       testGateway(),
 	})
 
 	// A Keycloak account holding none of the platform roles is
@@ -270,5 +284,24 @@ func TestMeRequiresAPlatformRole(t *testing.T) {
 	h.ServeHTTP(rec, r)
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("got %d %s", rec.Code, rec.Body.String())
+	}
+}
+
+func testGateway() *websocket.Gateway {
+	cfg := config.RealtimeConfig{MaxConnections: 10, MaxConnectionsPerUser: 2, MaxConnectionAge: time.Hour, PingInterval: time.Minute, TicketTTL: time.Minute}
+	return websocket.NewGateway(cfg, websocket.NewTicketStore(cfg.TicketTTL), websocket.WorldAuthorizer{}, nil, slog.New(slog.DiscardHandler))
+}
+
+func TestWebSocketRequiresTicket(t *testing.T) {
+	h, _ := newTestHandler(t, nil)
+	for _, target := range []string{"/ws", "/ws?ticket=forged", "/ws?access_token=x"} {
+		r := httptest.NewRequest(http.MethodGet, target, nil)
+		r.Header.Set("Connection", "Upgrade")
+		r.Header.Set("Upgrade", "websocket")
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, r)
+		if rec.Code != http.StatusUnauthorized || !strings.Contains(rec.Body.String(), `"code":"INVALID_TICKET"`) {
+			t.Errorf("%s: got %d %s", target, rec.Code, rec.Body.String())
+		}
 	}
 }

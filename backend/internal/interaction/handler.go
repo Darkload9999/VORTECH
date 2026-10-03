@@ -39,7 +39,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		httpx.Fail(w, r, h.log, err)
 		return
 	}
-	out, err := h.svc.Process(r.Context(), *p.PlayerID, req)
+	out, err := h.svc.Process(r.Context(), p, req)
 	if err != nil {
 		httpx.Fail(w, r, h.log, err)
 		return

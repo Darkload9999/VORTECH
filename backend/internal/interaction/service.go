@@ -8,15 +8,19 @@ import (
 	"net/netip"
 	"slices"
 	"sort"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/Darkload9999/VORTECH/backend/internal/auth"
 	"github.com/Darkload9999/VORTECH/backend/internal/career"
 	"github.com/Darkload9999/VORTECH/backend/internal/company"
 	"github.com/Darkload9999/VORTECH/backend/internal/database/db"
+	"github.com/Darkload9999/VORTECH/backend/internal/event"
 	"github.com/Darkload9999/VORTECH/backend/internal/httpx"
+	"github.com/Darkload9999/VORTECH/backend/internal/notification"
 	"github.com/Darkload9999/VORTECH/backend/internal/requestid"
 	"github.com/Darkload9999/VORTECH/backend/internal/world"
 )
@@ -71,17 +75,24 @@ type Service struct {
 	pool   *pgxpool.Pool
 	dir    *company.Directory
 	career *career.Service
+	pub    event.Publisher
 }
 
-// NewService returns a Service.
-func NewService(pool *pgxpool.Pool, dir *company.Directory, cs *career.Service) *Service {
-	return &Service{pool: pool, dir: dir, career: cs}
+// NewService returns a Service. pub may be nil (no events are emitted).
+func NewService(pool *pgxpool.Pool, dir *company.Directory, cs *career.Service, pub event.Publisher) *Service {
+	return &Service{pool: pool, dir: dir, career: cs, pub: pub}
 }
 
-// Process decides and applies one interaction for player. Rule denials are
-// normal outcomes; returned errors are *httpx.Error (unknown targets) or
-// internal failures.
-func (s *Service) Process(ctx context.Context, playerID uuid.UUID, req Request) (*Outcome, error) {
+// Process decides and applies one interaction for the player p. Rule
+// denials are normal outcomes; returned errors are *httpx.Error (bad
+// requests, unknown targets) or internal failures. Events are published
+// only after the transaction commits, so clients never observe state
+// that could still roll back.
+func (s *Service) Process(ctx context.Context, p *auth.Principal, req Request) (*Outcome, error) {
+	if p.PlayerID == nil {
+		return nil, httpx.NewError(http.StatusForbidden, career.CodeNoPlayerProfile, "This account has no player profile.")
+	}
+	playerID := *p.PlayerID
 	if err := req.Validate(); err != nil {
 		return nil, err
 	}
@@ -90,22 +101,31 @@ func (s *Service) Process(ctx context.Context, playerID uuid.UUID, req Request) 
 		return nil, err
 	}
 
-	var out *Outcome
+	var (
+		out    *Outcome
+		events []event.Event
+	)
 	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		q := db.New(tx)
 		st, err := s.career.Load(ctx, q, c.ID, playerID, true)
 		if err != nil {
 			return err
 		}
-		e := &exec{q: q, st: st, companyID: c.ID, playerID: playerID, req: req, record: recordFor(req)}
+		e := &exec{q: q, st: st, companyID: c.ID, playerID: playerID, userID: p.UserID, req: req, record: recordFor(req)}
 		if err := e.run(ctx); err != nil {
 			return err
 		}
-		out, err = e.finish(ctx, s.career)
-		return err
+		if out, err = e.finish(ctx, s.career); err != nil {
+			return err
+		}
+		events = e.events
+		return nil
 	})
 	if err != nil {
 		return nil, err
+	}
+	if s.pub != nil && len(events) > 0 {
+		s.pub.Publish(ctx, events...)
 	}
 	return out, nil
 }
@@ -116,7 +136,9 @@ type exec struct {
 	st        career.State
 	companyID uuid.UUID
 	playerID  uuid.UUID
+	userID    uuid.UUID
 	req       Request
+	events    []event.Event // published after commit
 
 	record     db.InsertInteractionParams
 	reason     string
@@ -161,6 +183,7 @@ func (e *exec) zone(_ context.Context) error {
 		}
 		e.moveTo(&id)
 		e.result = map[string]any{"zone": zoneRef(z)}
+		e.emit(event.PlayerEnteredZone, map[string]any{"zone": zoneRef(z)})
 	case LeaveZone:
 		if !e.inZone(id) {
 			e.deny(ReasonNotInZone)
@@ -278,12 +301,25 @@ func (e *exec) object(ctx context.Context) error {
 				return err
 			}
 			res["discovery"] = map[string]any{"asset_code": deref(o.AssetCode), "new": isNew}
+			if isNew {
+				e.emit(event.AssetDiscovered, map[string]any{
+					"asset_id": *o.AssetID, "asset_code": deref(o.AssetCode), "asset_name": deref(o.AssetName),
+					"object_key": o.ObjectKey, "xp_awarded": DiscoveryXP,
+				})
+			}
 		}
 		e.result = res
 	case AccessTerminal, StartEngagement:
 		e.deny(ReasonRequiresEngagement)
 	}
 	return nil
+}
+
+// emit queues an event for the player's private topic.
+func (e *exec) emit(typ string, data any) {
+	if ev, err := event.New(typ, event.PlayerTopic(e.playerID), data); err == nil {
+		e.events = append(e.events, ev)
+	}
 }
 
 // discover records the first sighting of an asset and awards XP.
@@ -338,6 +374,9 @@ func (e *exec) finish(ctx context.Context, cs *career.Service) (*Outcome, error)
 	out.Progress = Progress{XP: xp, Level: level, LevelUp: level.Rank > e.st.Level.Rank, NewlyAccessibleZones: []string{}}
 	if out.Progress.LevelUp {
 		out.Progress.NewlyAccessibleZones = e.newlyAccessible(level.Rank)
+		if err := e.promoted(ctx, level, out.Progress.NewlyAccessibleZones); err != nil {
+			return nil, err
+		}
 	}
 	if current != nil {
 		if z, ok := e.st.Access.Zone(*current); ok {
@@ -355,7 +394,46 @@ func (e *exec) finish(ctx context.Context, cs *career.Service) (*Outcome, error)
 		return nil, fmt.Errorf("record interaction: %w", err)
 	}
 	out.InteractionID = row.ID
+
+	// Discovery and zone events are only emitted on allowed paths; this
+	// guards against a future rule denying after they were queued.
+	if out.Outcome == "denied" {
+		e.events = nil
+	}
+	e.emit(event.PlayerInteracted, map[string]any{
+		"interaction_id": out.InteractionID, "type": out.Type, "outcome": out.Outcome,
+		"reason": out.Reason, "xp_awarded": out.XPAwarded,
+	})
 	return out, nil
+}
+
+// promoted records the level-up: a durable notification (in this
+// transaction) plus the corresponding events.
+func (e *exec) promoted(ctx context.Context, level career.Level, zones []string) error {
+	byCode := map[string]string{}
+	for id := range e.st.Access.All() {
+		if z, ok := e.st.Access.Zone(id); ok {
+			byCode[z.Code] = z.Name
+		}
+	}
+	names := make([]string, 0, len(zones))
+	for _, code := range zones {
+		names = append(names, byCode[code])
+	}
+	sort.Strings(names)
+	body := "Keep up the good work."
+	if len(names) > 0 {
+		body = "New areas unlocked: " + strings.Join(names, ", ") + "."
+	}
+	_, nev, err := notification.Create(ctx, e.q, e.userID, event.PlayerTopic(e.playerID),
+		notification.TypePromoted, "Promoted to "+level.Name, body,
+		map[string]any{"level_code": level.Code, "rank": level.Rank, "zones": zones})
+	if err != nil {
+		return err
+	}
+	e.emit(event.CareerLevelUp, map[string]any{"level": level, "newly_accessible_zones": zones})
+	e.events = append(e.events, nev)
+	return nil
 }
 
 // newlyAccessible lists zones that open at the new rank.

@@ -20,11 +20,14 @@ import (
 	"github.com/Darkload9999/VORTECH/backend/internal/database"
 	"github.com/Darkload9999/VORTECH/backend/internal/database/db"
 	"github.com/Darkload9999/VORTECH/backend/internal/employee"
+	"github.com/Darkload9999/VORTECH/backend/internal/event"
 	"github.com/Darkload9999/VORTECH/backend/internal/health"
 	"github.com/Darkload9999/VORTECH/backend/internal/interaction"
 	"github.com/Darkload9999/VORTECH/backend/internal/logging"
+	"github.com/Darkload9999/VORTECH/backend/internal/notification"
 	"github.com/Darkload9999/VORTECH/backend/internal/player"
 	"github.com/Darkload9999/VORTECH/backend/internal/server"
+	"github.com/Darkload9999/VORTECH/backend/internal/websocket"
 	"github.com/Darkload9999/VORTECH/backend/internal/world"
 )
 
@@ -59,8 +62,13 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	rtCfg, err := config.LoadRealtime(os.LookupEnv)
+	if err != nil {
+		return err
+	}
 	log := logging.New(os.Stdout, cfg.Log, "api")
-	log.Info("starting", "commit", buildinfo.Commit, "build_time", buildinfo.BuildTime, "config", cfg, "auth", authCfg)
+	log.Info("starting", "commit", buildinfo.Commit, "build_time", buildinfo.BuildTime,
+		"config", cfg, "auth", authCfg, "realtime", rtCfg)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -93,9 +101,10 @@ func run() error {
 		ClientID: authCfg.ClientID,
 		Leeway:   authCfg.ClockSkew,
 	})
+	auditRec := audit.NewRecorder(queries, log)
 	authn := auth.NewAuthenticator(verifier,
 		player.NewDirectory(pool, log, authCfg.IdentityCacheTTL),
-		audit.NewRecorder(queries, log),
+		auditRec,
 		log,
 	)
 
@@ -112,7 +121,15 @@ func run() error {
 	// cache avoids a lookup on every request.
 	companies := company.NewDirectory(queries, 10*time.Second)
 	careers := career.NewService(queries)
-	interactions := interaction.NewService(pool, companies, careers)
+
+	// Internal event bus → WebSocket gateway. Events are published after
+	// the producing transaction commits.
+	bus := event.NewBus(log)
+	gateway := websocket.NewGateway(rtCfg, websocket.NewTicketStore(rtCfg.TicketTTL),
+		websocket.WorldAuthorizer{Dir: companies, Q: queries, Access: careers}, bus, log)
+	unsubscribe := bus.Subscribe("websocket-gateway", func(e event.Event) bool { return e.Topic != "" }, gateway.Deliver)
+
+	interactions := interaction.NewService(pool, companies, careers, bus)
 	handler := newHandler(deps{
 		cfg:       cfg,
 		log:       log,
@@ -125,15 +142,34 @@ func run() error {
 		world:     world.NewHandler(companies, queries, careers, log),
 		progress:  career.NewHandler(careers, companies, queries, log),
 		// 10 interactions/s sustained per player, bursts of 20.
-		interactions: interaction.NewHandler(interactions, interaction.NewLimiter(10, 20), log),
+		interactions:  interaction.NewHandler(interactions, interaction.NewLimiter(10, 20), log),
+		notifications: notification.NewHandler(queries, log),
+		announcer:     world.NewAnnouncer(companies, bus, auditRec, log),
+		gateway:       gateway,
 	})
 	srv := server.New(cfg.HTTP.Addr, handler, cfg.HTTP, log)
 
 	err = server.Run(ctx, log, srv, ln, server.ShutdownOptions{
-		OnDrain:    hs.SetDraining,
+		OnDrain: func() {
+			hs.SetDraining()
+			// Close WebSockets with "going away" so clients reconnect
+			// (to another instance) while this one drains.
+			gateway.Drain()
+		},
 		DrainDelay: cfg.Shutdown.DrainDelay,
 		Timeout:    cfg.Shutdown.Timeout,
 	})
+
+	// Hijacked WebSocket connections are not tracked by http.Server.Shutdown.
+	waitCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if werr := gateway.Wait(waitCtx); werr != nil {
+		log.Warn("websocket handlers still running at shutdown", "error", werr)
+	}
+	unsubscribe()
+	if berr := bus.Close(waitCtx); berr != nil {
+		log.Warn("event bus did not stop cleanly", "error", berr)
+	}
 	if err != nil {
 		return err
 	}
