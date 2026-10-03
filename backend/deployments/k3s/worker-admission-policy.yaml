@@ -1,0 +1,59 @@
+# Confines the worker's cluster-wide RBAC to range namespaces. Evaluated by
+# the API server for every write the worker makes; a compromised worker
+# cannot touch kube-system, the platform namespace or anything unlabelled,
+# and cannot weaken a range namespace's Pod Security level.
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: vortech-worker-scope
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: ["", "apps", "networking.k8s.io"]
+        apiVersions: ["*"]
+        operations: ["CREATE", "UPDATE", "DELETE", "CONNECT"]
+        resources:
+          - namespaces
+          - serviceaccounts
+          - resourcequotas
+          - limitranges
+          - secrets
+          - services
+          - deployments
+          - networkpolicies
+          - pods/exec
+  matchConditions:
+    - name: is-vortech-worker
+      expression: request.userInfo.username == "system:serviceaccount:vortech:vortech-worker"
+  variables:
+    - name: ns
+      # The namespace being written, or (for namespaced objects) the one
+      # the object lives in.
+      expression: >-
+        request.resource.resource == "namespaces"
+          ? (request.operation == "DELETE" ? oldObject : object)
+          : namespaceObject
+    - name: managed
+      expression: >-
+        variables.ns != null
+          && variables.ns.metadata.name.startsWith("range-")
+          && has(variables.ns.metadata.labels)
+          && "vortech.io/managed-by" in variables.ns.metadata.labels
+          && variables.ns.metadata.labels["vortech.io/managed-by"] == "vortech"
+  validations:
+    - expression: variables.managed
+      message: the VORTECH worker may only manage range-* namespaces labelled vortech.io/managed-by=vortech
+    - expression: >-
+        request.resource.resource != "namespaces" || request.operation == "DELETE"
+          || ("pod-security.kubernetes.io/enforce" in object.metadata.labels
+              && object.metadata.labels["pod-security.kubernetes.io/enforce"] == "restricted")
+      message: range namespaces must enforce Pod Security "restricted"
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: vortech-worker-scope
+spec:
+  policyName: vortech-worker-scope
+  validationActions: ["Deny"]

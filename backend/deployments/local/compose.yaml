@@ -157,6 +157,11 @@ services:
     environment:
       <<: *backend-env
       WORKER_HTTP_ADDR: ":8081"
+      # Written by make cluster-up; reaches k3d over its docker network.
+      KUBECONFIG: /run/vortech/kubeconfig
+    volumes:
+      - ./k3s/kubeconfig-worker-docker:/run/vortech/kubeconfig:ro
+    networks: [default, k3d]
     healthcheck:
       test: ["CMD", "/app/worker", "-healthcheck"]
       interval: 5s
@@ -164,6 +169,12 @@ services:
       retries: 5
     stop_grace_period: 30s
     restart: unless-stopped
+
+networks:
+  # The local K3s cluster's network (make cluster-up creates it).
+  k3d:
+    name: k3d-vortech
+    external: true
 
 volumes:
   pgdata:

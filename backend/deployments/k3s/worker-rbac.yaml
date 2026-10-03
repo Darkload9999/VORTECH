@@ -1,0 +1,63 @@
+# Least-privilege identity for the VORTECH worker in K3s.
+#
+# Range namespaces are created dynamically, so the worker needs a
+# ClusterRole. On its own that would let it write Secrets or Deployments
+# anywhere; the ValidatingAdmissionPolicy in worker-admission-policy.yaml
+# confines every write to namespaces named range-* that carry
+# vortech.io/managed-by=vortech and Pod Security "restricted".
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: vortech
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: vortech-worker
+  namespace: vortech
+automountServiceAccountToken: true
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: vortech-worker
+rules:
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get", "list", "watch", "create", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["serviceaccounts", "resourcequotas", "limitranges", "services"]
+    verbs: ["get", "list", "create"]
+  # Create only: the worker writes generated range secrets but never needs
+  # to read Secrets back (no get/list/watch anywhere in the cluster).
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["create"]
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["networkpolicies"]
+    verbs: ["get", "list", "create"]
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list", "create", "patch"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list"]
+  # Player terminals and diagnostics.
+  - apiGroups: [""]
+    resources: ["pods/exec"]
+    verbs: ["create", "get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: vortech-worker
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: vortech-worker
+subjects:
+  - kind: ServiceAccount
+    name: vortech-worker
+    namespace: vortech
